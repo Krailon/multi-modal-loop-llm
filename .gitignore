@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# Environments
+.venv/
+venv/
+
+# Packaging
+build/
+dist/
+
+# Training artifacts
+checkpoints/
+outputs/
+runs/
+logs/
+
+# Data
+data/cache/
+data/raw/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Jupyter
+.ipynb_checkpoints/
