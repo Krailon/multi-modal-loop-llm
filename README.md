@@ -322,7 +322,22 @@ ANSWER 2 → IMAGE + QUESTION + ANSWER 1
 ANSWER 3 → IMAGE + QUESTION + ANSWER 1 + ANSWER 2
 ```
 
-Image and question tokens must never attend to future answer tokens.
+Image and question tokens must never attend to any answer tokens.
+
+The diagram describes answer prediction. Actual attention masks index **input
+tokens** and include the diagonal: each input can attend to itself, and its
+output predicts the next token. Future training will shift targets by one
+position; for question answering, the final question input predicts the first
+answer token, with loss applied to answer targets.
+
+`build_causal_mask(seq_len, *, device=None)` and
+`build_prefix_mask(seq_len, prefix_len, *, device=None)` are implemented in
+`multimodal_loop.model.attention`. They return boolean `[seq_len, seq_len]`
+tensors with query rows and key columns. `True` means attention is allowed,
+matching PyTorch's scaled dot-product attention convention. The prefix length
+counts all image/question input tokens. A zero-length prefix gives causal
+attention; a full-length prefix permits all attention. Each mask uses one
+prefix length shared across batch items, without padding handling.
 
 The purpose of this masking scheme is to allow visual representations themselves to change during recurrent computation.
 
@@ -330,9 +345,9 @@ The purpose of this masking scheme is to allow visual representations themselves
 
 # Repository Structure
 
-Importable code lives under `src/multimodal_loop/`. Configuration and patch
-embedding are implemented; the remaining model, data, training, and evaluation
-modules are scaffolding for subsequent increments.
+Importable code lives under `src/multimodal_loop/`. Configuration, patch
+embedding, and attention-mask helpers are implemented; the remaining model,
+data, training, and evaluation components are scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -933,10 +948,11 @@ These projects provide useful reference implementations and experimental precede
 
 **Phase:** Milestone 0 — infrastructure and correctness, in progress.
 
-The first increment implements validated model configuration and direct image
-patch embeddings, with tests for patch ordering, projection, input validation,
-and gradient flow. The complete transformer, attention masks, recurrent core,
-training, and checkpoint support remain to be implemented.
+Validated model configuration, direct image patch embeddings, and causal/prefix
+attention-mask helpers are implemented. Tests cover patch ordering, projection,
+input validation, gradient flow, and allowed/blocked attention patterns. The
+attention computation, complete transformer, recurrent core, training, and
+checkpoint support remain to be implemented.
 
 ## Local development
 
