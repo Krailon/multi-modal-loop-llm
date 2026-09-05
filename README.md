@@ -248,7 +248,6 @@ A simplified model interface may look like:
 
 ```python
 class MultimodalLoopTransformer(nn.Module):
-
     def __init__(self, config):
         super().__init__()
 
@@ -329,7 +328,11 @@ The purpose of this masking scheme is to allow visual representations themselves
 
 ---
 
-# Proposed Repository Structure
+# Repository Structure
+
+Importable code lives under `src/multimodal_loop/`. Configuration and patch
+embedding are implemented; the remaining model, data, training, and evaluation
+modules are scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -344,33 +347,36 @@ multimodal-loop/
 │   ├── tiny.yaml
 │   └── base.yaml
 │
-├── model/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── embeddings.py
-│   ├── patch_embedding.py
-│   ├── attention.py
-│   ├── transformer.py
-│   ├── recurrent_core.py
-│   └── model.py
-│
-├── data/
-│   ├── synthetic_shapes.py
-│   ├── text.py
-│   ├── multimodal.py
-│   └── collator.py
-│
-├── train/
-│   ├── trainer.py
-│   ├── recurrence.py
-│   ├── losses.py
-│   └── schedules.py
-│
-├── eval/
-│   ├── synthetic.py
-│   ├── recurrence_sweep.py
-│   ├── stability.py
-│   └── diagnostics.py
+├── src/
+│   └── multimodal_loop/
+│       ├── __init__.py
+│       ├── model/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   ├── embeddings.py
+│       │   ├── patch_embedding.py
+│       │   ├── attention.py
+│       │   ├── transformer.py
+│       │   ├── recurrent_core.py
+│       │   └── model.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   ├── synthetic_shapes.py
+│       │   ├── text.py
+│       │   ├── multimodal.py
+│       │   └── collator.py
+│       ├── train/
+│       │   ├── __init__.py
+│       │   ├── trainer.py
+│       │   ├── recurrence.py
+│       │   ├── losses.py
+│       │   └── schedules.py
+│       └── eval/
+│           ├── __init__.py
+│           ├── synthetic.py
+│           ├── recurrence_sweep.py
+│           ├── stability.py
+│           └── diagnostics.py
 │
 ├── scripts/
 │   ├── train.py
@@ -378,6 +384,7 @@ multimodal-loop/
 │   └── generate_synthetic_data.py
 │
 └── tests/
+    ├── test_config.py
     ├── test_attention_mask.py
     ├── test_patch_embedding.py
     ├── test_recurrence.py
@@ -387,6 +394,15 @@ multimodal-loop/
 ---
 
 # Module Responsibilities
+
+The paths below are relative to `src/multimodal_loop/`.
+
+## `model/config.py`
+
+Defines the immutable `ModelConfig` dataclass, validates architecture settings,
+and derives attention-head width, patch count, and flattened patch size.
+
+---
 
 ## `model/model.py`
 
@@ -915,7 +931,86 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Architecture and experimental-design stage.
+**Phase:** Milestone 0 — infrastructure and correctness, in progress.
+
+The first increment implements validated model configuration and direct image
+patch embeddings, with tests for patch ordering, projection, input validation,
+and gradient flow. The complete transformer, attention masks, recurrent core,
+training, and checkpoint support remain to be implemented.
+
+## Local development
+
+Python 3.11 or newer is required. For a local CPU development environment, run
+these commands from the repository root:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install "torch>=2.7,<3.0" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[dev]"
+```
+
+`pyproject.toml` is the authoritative dependency configuration. PyTorch is an
+optional dependency so that hosted environments such as Kaggle can retain their
+accelerator-specific installation. If compatible PyTorch is already installed,
+use that environment and run only the editable-install command above. The
+`requirements.txt` alternative includes the `torch` extra for local environments
+where pip should provide PyTorch.
+
+Run the checks in the activated environment:
+
+```bash
+pytest
+ruff check .
+ruff format --check .
+```
+
+If formatting needs to change, run `ruff format .`.
+
+## Configuration and patch embedding
+
+`ModelConfig()` uses deliberately tiny defaults for CPU correctness work:
+
+| Settings | Defaults |
+| --- | --- |
+| `vocab_size`, `max_seq_len` | 256, 128 |
+| `d_model`, `n_heads`, `d_ff` | 64, 4, 256 |
+| `n_prelude_layers`, `n_recurrent_layers`, `n_coda_layers` | 1, 1, 1 |
+| `recurrence_depth` | 2 |
+| `image_size`, `patch_size`, `num_channels` | 32, 8, 3 |
+| `dropout`, `layer_norm_eps` | 0.0, 1e-5 |
+
+The larger dimensions in Initial Model Scale describe later experiments, not the
+current defaults. `max_seq_len` is the eventual combined visual/text sequence
+limit. `recurrence_depth` specifies the default number of applications of the
+shared recurrent stack; runtime overrides will be supported by the full model.
+
+```python
+import torch
+
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.patch_embedding import PatchEmbedding
+
+config = ModelConfig()
+image_embed = PatchEmbedding(config)
+images = torch.randn(2, config.num_channels, config.image_size, config.image_size)
+tokens = image_embed(images)
+
+assert tokens.shape == (2, 16, 64)
+tokens.square().mean().backward()
+```
+
+Each configuration accepts one fixed square image size, divisible by its square
+patch size. Input tensors must be floating point and shaped `[batch, channels,
+height, width]`. Patches are ordered left to right, then top to bottom; values
+within a patch are flattened in channel, row, column order. One shared linear
+projection with bias maps every patch to `d_model` features. Positional and
+modality embeddings will be added separately.
+
+Inputs and module parameters follow normal PyTorch device and dtype conventions;
+patch embedding performs no implicit transfers or casts. Configurations are
+immutable and can be serialized with `dataclasses.asdict(config)` and rebuilt
+with `ModelConfig(**values)`.
 
 Immediate objective:
 
