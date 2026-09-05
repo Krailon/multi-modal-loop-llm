@@ -358,16 +358,17 @@ training; calling `.eval()` disables dropout.
 Explicit masks must be boolean `[seq_len, seq_len]` tensors on the input device,
 with at least one allowed key in every query row. Inputs and parameters follow
 normal PyTorch device and dtype conventions, without implicit transfers or
-casts. Residual connections, normalization, and positional embeddings will be
-provided by surrounding model components.
+casts. `TransformerBlock` provides residual connections and normalization;
+positional embeddings remain a separate component.
 
 ---
 
 # Repository Structure
 
 Importable code lives under `src/multimodal_loop/`. Configuration, patch
-embedding, attention-mask helpers, and self-attention are implemented; the remaining model,
-data, training, and evaluation components are scaffolding for subsequent increments.
+embedding, attention-mask helpers, self-attention, and a single transformer
+block are implemented. The remaining model, data, training, and evaluation
+components are scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -423,6 +424,7 @@ multimodal-loop/
     ├── test_attention_mask.py
     ├── test_attention.py
     ├── test_patch_embedding.py
+    ├── test_transformer.py
     ├── test_recurrence.py
     └── test_model.py
 ```
@@ -492,9 +494,29 @@ Attention behavior should be independently testable.
 
 ## `model/transformer.py`
 
-Contains the basic transformer block used by the model.
+Defines `TransformerBlock(config)`, which adds normalization, a feed-forward
+network, and residual connections around `SelfAttention`. Its
+`forward(x, attention_mask=None)` method preserves `[batch, seq_len, d_model]`
+and leaves the input tensor unchanged. The attention layer supplies the causal
+default and validates explicit masks.
 
-Initially this should remain relatively conventional so that recurrence can be studied independently.
+Each branch uses its own trainable LayerNorm over the feature dimension, before
+computing its update:
+
+```text
+h = x + dropout_attention(SelfAttention(LayerNorm_attention(x), attention_mask))
+y = h + dropout_feedforward(FFN(LayerNorm_feedforward(h)))
+```
+
+The feed-forward network is `Linear(d_model, d_ff) -> GELU -> Linear(d_ff, d_model)`.
+Both projections use bias and standard PyTorch initialization. The two LayerNorm
+modules use `config.layer_norm_eps` and independent affine parameters.
+`config.dropout` controls dropout on each branch output before residual addition,
+as well as attention-probability dropout inside `SelfAttention`. Calling `.eval()`
+disables all dropout. The block returns `y` directly.
+
+This conventional block is the building unit for future stacks and the shared
+recurrent core. Positional embeddings and recurrence are separate components.
 
 ---
 
@@ -970,11 +992,12 @@ These projects provide useful reference implementations and experimental precede
 **Phase:** Milestone 0 — infrastructure and correctness, in progress.
 
 Validated model configuration, direct image patch embeddings, causal/prefix
-attention-mask helpers, and multi-head self-attention are implemented. Tests
-cover patch ordering, projection, input validation, gradient flow, explicit
-attention-math agreement, causal/prefix isolation, and dropout behavior. The
-complete transformer, recurrent core, training, and checkpoint support remain
-to be implemented.
+attention-mask helpers, multi-head self-attention, and a single transformer
+block are implemented. Tests cover patch ordering, projection, input validation,
+gradient flow, attention-math and PyTorch block-reference agreement, residual
+identity, causal/prefix isolation, and dropout behavior. Embeddings for text,
+positions, and modalities, transformer stacks, the recurrent core, complete model,
+training, and checkpoint support remain to be implemented.
 
 ## Local development
 
