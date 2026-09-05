@@ -341,12 +341,32 @@ prefix length shared across batch items, without padding handling.
 
 The purpose of this masking scheme is to allow visual representations themselves to change during recurrent computation.
 
+## Self-attention
+
+`SelfAttention(config)` in `multimodal_loop.model.attention` implements
+conventional multi-head self-attention. Its `forward(x, attention_mask=None)`
+method accepts floating-point `[batch, seq_len, d_model]` inputs and returns
+transformed representations with the same shape. Omitting the mask uses causal
+attention; supplying a prefix mask enables the multimodal behavior above.
+
+One learned linear projection produces queries, keys, and values for all heads.
+PyTorch's `scaled_dot_product_attention` computes attention, and a second linear
+projection combines the heads. Both projections use bias and standard PyTorch
+initialization. `config.dropout` controls attention-probability dropout during
+training; calling `.eval()` disables dropout.
+
+Explicit masks must be boolean `[seq_len, seq_len]` tensors on the input device,
+with at least one allowed key in every query row. Inputs and parameters follow
+normal PyTorch device and dtype conventions, without implicit transfers or
+casts. Residual connections, normalization, and positional embeddings will be
+provided by surrounding model components.
+
 ---
 
 # Repository Structure
 
 Importable code lives under `src/multimodal_loop/`. Configuration, patch
-embedding, and attention-mask helpers are implemented; the remaining model,
+embedding, attention-mask helpers, and self-attention are implemented; the remaining model,
 data, training, and evaluation components are scaffolding for subsequent increments.
 
 ```text
@@ -401,6 +421,7 @@ multimodal-loop/
 └── tests/
     ├── test_config.py
     ├── test_attention_mask.py
+    ├── test_attention.py
     ├── test_patch_embedding.py
     ├── test_recurrence.py
     └── test_model.py
@@ -948,11 +969,12 @@ These projects provide useful reference implementations and experimental precede
 
 **Phase:** Milestone 0 — infrastructure and correctness, in progress.
 
-Validated model configuration, direct image patch embeddings, and causal/prefix
-attention-mask helpers are implemented. Tests cover patch ordering, projection,
-input validation, gradient flow, and allowed/blocked attention patterns. The
-attention computation, complete transformer, recurrent core, training, and
-checkpoint support remain to be implemented.
+Validated model configuration, direct image patch embeddings, causal/prefix
+attention-mask helpers, and multi-head self-attention are implemented. Tests
+cover patch ordering, projection, input validation, gradient flow, explicit
+attention-math agreement, causal/prefix isolation, and dropout behavior. The
+complete transformer, recurrent core, training, and checkpoint support remain
+to be implemented.
 
 ## Local development
 

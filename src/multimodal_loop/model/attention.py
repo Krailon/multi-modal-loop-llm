@@ -1,7 +1,10 @@
-"""Attention-mask construction for text and multimodal input sequences."""
+"""Self-attention and mask construction for text and multimodal sequences."""
 
 import torch
-from torch import Tensor
+import torch.nn.functional as F
+from torch import Tensor, nn
+
+from multimodal_loop.model.config import ModelConfig
 
 
 def build_causal_mask(seq_len: int, *, device: torch.device | str | None = None) -> Tensor:
@@ -46,3 +49,79 @@ def build_prefix_mask(
     mask = torch.ones(seq_len, seq_len, dtype=torch.bool, device=device).tril()
     mask[:prefix_len, :prefix_len] = True
     return mask
+
+
+class SelfAttention(nn.Module):
+    """Conventional multi-head self-attention with a causal default.
+
+    Query, key, and value features share one linear projection; an output
+    projection maps the concatenated heads back to the model width. Both
+    projections use bias and standard PyTorch initialization. Dropout applies
+    to attention probabilities during training only.
+
+    Residual connections, normalization, and positional embeddings belong to
+    the surrounding model components.
+    """
+
+    def __init__(self, config: ModelConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.qkv_proj = nn.Linear(config.d_model, 3 * config.d_model)
+        self.out_proj = nn.Linear(config.d_model, config.d_model)
+
+    def forward(self, x: Tensor, attention_mask: Tensor | None = None) -> Tensor:
+        """Map floating-point ``[B, T, d_model]`` inputs to the same shape.
+
+        An omitted mask uses causal attention. Explicit masks must be boolean
+        ``[T, T]`` tensors on the input device, with ``True`` allowing attention
+        and at least one allowed key per query. The mask is shared across batch
+        items and heads; padding and per-example masks are not supported here.
+
+        Device and dtype follow normal PyTorch module conventions, without
+        implicit transfers or casts. Only transformed representations are
+        returned, without attention weights or a residual connection.
+        """
+        if x.ndim != 3:
+            raise ValueError(
+                f"x must have rank 3 [batch, seq_len, d_model], got shape {tuple(x.shape)}"
+            )
+        batch_size, seq_len, width = x.shape
+        if width != self.config.d_model:
+            raise ValueError(f"x must have width d_model={self.config.d_model}, got {width}")
+        if seq_len <= 0:
+            raise ValueError("x must have a positive sequence length")
+        if not x.is_floating_point():
+            raise TypeError(f"x must have a floating-point dtype, got {x.dtype}")
+
+        if attention_mask is None:
+            attention_mask = build_causal_mask(seq_len, device=x.device)
+        else:
+            if attention_mask.shape != (seq_len, seq_len):
+                raise ValueError(
+                    f"attention_mask must have shape {(seq_len, seq_len)}, "
+                    f"got {tuple(attention_mask.shape)}"
+                )
+            if attention_mask.dtype != torch.bool:
+                raise TypeError(
+                    f"attention_mask must have boolean dtype, got {attention_mask.dtype}"
+                )
+            if attention_mask.device != x.device:
+                raise ValueError("attention_mask must be on the same device as x")
+            if not attention_mask.any(dim=-1).all():
+                raise ValueError("attention_mask must allow at least one key per query")
+
+        # [B, T, 3 * d_model] -> [3, B, n_heads, T, head_dim]
+        qkv = self.qkv_proj(x).reshape(
+            batch_size, seq_len, 3, self.config.n_heads, self.config.head_dim
+        )
+        queries, keys, values = qkv.permute(2, 0, 3, 1, 4).unbind(dim=0)
+        attended = F.scaled_dot_product_attention(
+            queries,
+            keys,
+            values,
+            attn_mask=attention_mask,
+            dropout_p=self.config.dropout if self.training else 0.0,
+        )
+        # [B, n_heads, T, head_dim] -> [B, T, d_model]
+        attended = attended.transpose(1, 2).reshape(batch_size, seq_len, width)
+        return self.out_proj(attended)
