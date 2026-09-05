@@ -1,0 +1,8 @@
+# Local development installation.
+#
+# Kaggle installs directly from GitHub instead of using this file.
+#
+# [torch] installs PyTorch for local environments.
+# Kaggle should use the PyTorch supplied by its accelerator runtime.
+
+-e .[torch,dev]
