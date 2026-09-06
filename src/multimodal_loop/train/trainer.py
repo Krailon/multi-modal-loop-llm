@@ -7,6 +7,7 @@ from torch.optim import Optimizer
 from multimodal_loop.model.attention import build_prefix_mask
 from multimodal_loop.model.model import MultimodalLoopTransformer
 from multimodal_loop.train.losses import shifted_cross_entropy
+from multimodal_loop.train.runtime import finish_step
 
 
 def train_on_batch(
@@ -75,5 +76,6 @@ def train_on_batch(
             raise FloatingPointError("training loss must be finite")
         loss.backward()
         optimizer.step()
+        finish_step(input_ids.device)
         losses.append(loss.detach().item())
     return losses

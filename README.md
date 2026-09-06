@@ -376,7 +376,7 @@ Importable code lives under `src/multimodal_loop/`. Configuration, patch and
 multimodal embeddings, attention-mask helpers, self-attention, transformer
 blocks/stacks, the recurrent core, and the complete language-model composition
 are implemented, along with shifted language loss, a minimal tensor-batch
-training loop, and CPU checkpoint/resume support. Data, evaluation, and
+training loop, and single-device checkpoint/resume support. Data, evaluation, and
 training-policy components remain scaffolding for subsequent increments.
 
 ```text
@@ -412,6 +412,7 @@ multimodal-loop/
 │       │   └── collator.py
 │       ├── train/
 │       │   ├── __init__.py
+│       │   ├── runtime.py
 │       │   ├── checkpoint.py
 │       │   ├── trainer.py
 │       │   ├── recurrence.py
@@ -625,7 +626,8 @@ optimizer state across calls. This is the Milestone 0 training smoke path.
 
 `save_checkpoint` writes configuration, model and AdamW state, the fixed tensor
 batch, completed steps, training settings, and global RNG states to a single
-versioned `.pt` file. `load_checkpoint` reconstructs a CPU model and optimizer
+versioned `.pt` file. `load_checkpoint(path, device="cpu")` reconstructs a model and optimizer
+on the requested matching backend
 and returns them in `LoadedCheckpoint` with the saved batch and progress.
 RNG restoration happens after object construction so initialization cannot
 consume the resumed random sequence.
@@ -1106,6 +1108,9 @@ can influence answer predictions. Shifted cross-entropy, answer-target masking,
 and a small AdamW training script are implemented and tested on fixed synthetic
 batches, including loss reduction and optimizer-state continuity across calls.
 CPU checkpoint save/load and deterministic training resume are implemented.
+Single-device CUDA/TPU training and same-backend resume paths are also implemented;
+actual GPU/TPU validation remains pending. The opt-in hardware suite below records
+that validation separately from the CPU baseline.
 Tests compare uninterrupted and resumed training with dropout enabled, including
 exact loss, parameter, optimizer-state, and RNG equality across process restarts.
 The package also builds and installs as a wheel, with imports, training, and a
@@ -1360,9 +1365,10 @@ On resume, the saved batch, question length, recurrence depth, and optimizer
 settings determine the continuation. The script does not regenerate data or
 reseed. Explicit new-run settings such as `--seed`, `--text-only`,
 `--learning-rate`, or `--recurrence-depth` are rejected with `--resume`.
-`--steps`, `--save-checkpoint`, and CPU device selection remain available.
+`--steps`, `--save-checkpoint`, and `--device` remain available. The device must
+match the saved backend; the default remains CPU.
 
-Version 1 checkpoints contain:
+Version 2 checkpoints contain:
 
 * Format version, `ModelConfig` values, model dtype and train/eval mode, and
   model weights.
@@ -1370,7 +1376,11 @@ Version 1 checkpoints contain:
   and optional image tensors, question length, effective recurrence depth, and
   the original seed when supplied.
 * Python `random`, NumPy's global RNG (including its Gaussian cache), and
-  PyTorch CPU RNG states.
+  PyTorch CPU RNG states, plus the selected CUDA or XLA device RNG state.
+* Backend identity and runtime versions for identifying the execution environment.
+
+Existing version 1 CPU checkpoints still load. All saved tensors, including
+accelerator weights and optimizer moments, are detached CPU snapshots.
 
 Files contain tensors and ordinary Python values and load with
 `torch.load(..., map_location="cpu", weights_only=True)`. Writes use a temporary
@@ -1381,7 +1391,7 @@ step clears them.
 
 The public helpers are `save_checkpoint(path, model, optimizer, *,
 completed_steps, input_ids, images=None, question_length=0,
-recurrence_depth=None, seed=None)` and `load_checkpoint(path)`.
+recurrence_depth=None, seed=None)` and `load_checkpoint(path, *, device="cpu")`.
 The loader returns a `LoadedCheckpoint` with the model, optimizer, completed
 steps, batch tensors, question length, effective recurrence depth, and seed.
 For example, after creating the file above:
@@ -1421,10 +1431,127 @@ Exact continuation is tested on CPU float32/float64 in the same software,
 hardware, and execution environment. The supported baseline has all parameters
 trainable, a uniform train/eval mode, and one AdamW parameter group containing
 all model parameters in their original order. Unsupported devices, dtypes,
-optimizer layouts, and format versions raise errors. CUDA/XLA RNG, independent
-random generators, data-loader state, schedulers, and mixed-precision state are
-outside version 1. These checks establish the CPU infrastructure baseline for
-Milestone 0; visual reasoning experiments belong to Milestone 1.
+optimizer layouts, and format versions raise errors. Accelerator checkpoints use
+float32 and ordinary AdamW (`foreach=False, fused=False`, with capturable and
+differentiable execution disabled). Construct the optimizer after moving the
+model to its device. Loading places AdamW moments alongside parameters and keeps
+non-capturable step counters on CPU.
+
+Resume on the same backend and hardware/software environment. CUDA indices may
+change, but CPU/CUDA/TPU cross-backend continuation is not supported. Accelerator
+checks require exact RNG replay and numerical agreement for losses, parameters,
+and optimizer moments: `rtol=1e-5, atol=1e-6` on CUDA and `rtol=1e-4, atol=1e-5`
+on TPU. These tolerances do not assert bitwise accelerator training equivalence.
+Independent random generators, data-loader state, schedulers, and mixed-precision
+state remain outside the checkpoint format.
+
+## Single-device CUDA and TPU on Kaggle
+
+Select a GPU or TPU accelerator in Kaggle's notebook settings. The training
+script accepts `--device cpu`, `cuda`, `cuda:N`, or `xla` (the first TPU device).
+It fails if the requested device is unavailable. There is no automatic CPU
+fallback, distributed launch, SPMD, mixed precision, or use of every TPU core.
+
+`train/runtime.py` provides explicit device selection, global host/device
+seeding, XLA step synchronization, and device RNG helpers. CPU and CUDA imports
+do not import `torch_xla`. Fresh runs construct their model and synthetic batch
+on CPU, transfer them, and then construct AdamW. `train_on_batch` keeps caller-owned
+placement and calls `torch_xla.sync(wait=True)` after each TPU optimizer update,
+as in the [PyTorch/XLA single-device guide](https://docs.pytorch.org/xla/master/learn/pytorch-on-xla-devices.html).
+Supervision masking retains fixed tensor shapes using ignored targets. Existing
+value validation remains enabled; host checks can synchronize XLA execution.
+This is a correctness path, not a throughput benchmark.
+
+### Install and inspect the environment
+
+Push the desired repository revision before using these cells. In a fresh Kaggle
+notebook, clone the branch containing these changes and install the package:
+
+```python
+%cd /kaggle/working
+!git clone --branch milestone0 https://github.com/Krailon/multi-modal-loop-llm.git
+%cd /kaggle/working/multi-modal-loop-llm
+%pip install -e ".[dev]"
+```
+
+Use the notebook's installed accelerator stack. Do not install this project's
+`torch` extra or `requirements.txt` over it. PyTorch/XLA must match PyTorch's
+major/minor version, and libtpu must be compatible with that pair. Kaggle's
+[TPU image configuration](https://github.com/Kaggle/docker-python/blob/main/tpu/config.txt)
+and [TPU Dockerfile](https://github.com/Kaggle/docker-python/blob/main/tpu/Dockerfile)
+currently coordinate PyTorch 2.8 with a compatible libtpu; individual notebook
+images may differ. These are environment references, not new package pins.
+The runtime reports missing or mismatched dependencies without replacing them.
+
+Inspect versions without initializing the TPU in the notebook process:
+
+```python
+from importlib.metadata import PackageNotFoundError, version
+
+for package in ("torch", "torch_xla", "libtpu"):
+    try:
+        print(package, version(package))
+    except PackageNotFoundError:
+        print(package, "not installed")
+```
+
+Run training and tests as subprocesses. For TPU sessions, avoid initializing
+JAX, TensorFlow, or XLA in the notebook process first; let each subprocess own
+and release the TPU runtime. Restart the notebook session if it already owns it.
+
+### CUDA cells
+
+This uses one GPU, including on Kaggle machines with multiple GPUs:
+
+```bash
+%%bash
+set -e
+python -c 'import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
+python scripts/train.py --device cuda:0 --text-only --steps 2
+python scripts/train.py --device cuda:0 --steps 2 --save-checkpoint /kaggle/working/checkpoints/cuda.pt
+python scripts/train.py --device cuda:0 --resume /kaggle/working/checkpoints/cuda.pt --steps 2 --save-checkpoint /kaggle/working/checkpoints/cuda.pt
+MULTIMODAL_LOOP_TEST_DEVICE=cuda:0 python -m pytest -q tests/test_accelerators.py
+```
+
+### TPU cells
+
+Set PJRT and chip visibility before starting Python. The
+[PJRT guide](https://docs.pytorch.org/xla/master/learn/pjrt.html) documents these
+single-chip settings; the script selects one XLA device on that chip without
+spawning workers. Initial TPU graph compilation takes longer than CPU startup.
+
+```bash
+%%bash
+set -e
+export PJRT_DEVICE=TPU
+export TPU_PROCESS_BOUNDS=1,1,1
+export TPU_VISIBLE_CHIPS=0
+python -c 'from multimodal_loop.train.runtime import resolve_device, runtime_metadata; print(runtime_metadata(resolve_device("xla")))'
+python scripts/train.py --device xla --text-only --steps 2
+python scripts/train.py --device xla --steps 2 --save-checkpoint /kaggle/working/checkpoints/xla.pt
+python scripts/train.py --device xla --resume /kaggle/working/checkpoints/xla.pt --steps 2 --save-checkpoint /kaggle/working/checkpoints/xla.pt
+MULTIMODAL_LOOP_TEST_DEVICE=xla python -m pytest -q tests/test_accelerators.py
+```
+
+The hardware suite runs text-only and multimodal cases at depths 1 and 3,
+checks prefix isolation and gradients, and compares four uninterrupted updates
+with two updates followed by two resumed updates in fresh processes. Dropout is
+enabled for resume checks, including exact subsequent random draws and repeated
+save neutrality. Checkpoints are compared on CPU. An explicitly requested
+unavailable accelerator fails the suite; ordinary `pytest` skips these four
+hardware cases. `MULTIMODAL_LOOP_TEST_DEVICE=cpu` can exercise the same subprocess
+harness locally, but does not establish CUDA/TPU support.
+
+Record the selected Kaggle accelerator, printed runtime versions, and test output
+when running these checks. Until real hardware checks pass, CUDA and TPU remain
+implemented but unverified on those runtimes. CPU tests and mocked dispatch tests
+are not substitutes for accelerator validation.
+
+Files under `/kaggle/working/checkpoints` must be retained as notebook output
+using Kaggle's Save Version workflow before the session ends. In a later session,
+attach that output, pass its checkpoint path under `/kaggle/input/...` to
+`--resume`, and save the continued run to a new `/kaggle/working/checkpoints/...`
+path. Keep the backend and runtime environment consistent when resuming.
 
 Immediate objective:
 

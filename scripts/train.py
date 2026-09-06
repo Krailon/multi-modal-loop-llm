@@ -9,6 +9,7 @@ import torch
 from multimodal_loop.model.config import ModelConfig
 from multimodal_loop.model.model import MultimodalLoopTransformer
 from multimodal_loop.train.checkpoint import load_checkpoint, save_checkpoint
+from multimodal_loop.train.runtime import resolve_device, runtime_metadata, seed_everything
 from multimodal_loop.train.trainer import train_on_batch
 
 
@@ -17,11 +18,11 @@ def main() -> None:
     parser.add_argument(
         "--steps", type=int, default=20, help="Optimizer updates for this invocation."
     )
-    parser.add_argument("--device", default="cpu")
+    parser.add_argument("--device", default="cpu", help="cpu, cuda, cuda:N, or xla (TPU).")
     parser.add_argument(
         "--save-checkpoint", type=Path, help="Save after all requested updates finish."
     )
-    parser.add_argument("--resume", type=Path, help="Continue a saved CPU training run.")
+    parser.add_argument("--resume", type=Path, help="Continue a run on its saved backend.")
     fresh = parser.add_argument_group("new run settings (cannot be supplied with --resume)")
     fresh.add_argument("--batch-size", type=int, default=argparse.SUPPRESS)
     fresh.add_argument("--text-length", type=int, default=argparse.SUPPRESS)
@@ -42,9 +43,10 @@ def main() -> None:
 
     if args.steps <= 0:
         parser.error("steps must be positive")
-    device = torch.device(args.device)
-    if (args.resume is not None or args.save_checkpoint is not None) and device.type != "cpu":
-        parser.error("checkpoint save/resume supports CPU only")
+    try:
+        device = resolve_device(args.device)
+    except (ValueError, RuntimeError) as error:
+        parser.error(str(error))
     defaults = {
         "batch_size": 2,
         "text_length": 8,
@@ -62,7 +64,7 @@ def main() -> None:
                 "--resume cannot be combined with new run settings: "
                 + ", ".join("--" + name.replace("_", "-") for name in overrides)
             )
-        checkpoint = load_checkpoint(args.resume)
+        checkpoint = load_checkpoint(args.resume, device=device)
         model, optimizer = checkpoint.model, checkpoint.optimizer
         input_ids, images = checkpoint.input_ids, checkpoint.images
         question_length = checkpoint.question_length
@@ -93,11 +95,9 @@ def main() -> None:
         if num_image_tokens + args.text_length > config.max_seq_len:
             parser.error(f"combined image/text length must not exceed {config.max_seq_len}")
         seed = args.seed
-        torch.manual_seed(seed)
-        model = MultimodalLoopTransformer(config).to(device)
-        input_ids = torch.randint(
-            config.vocab_size, (args.batch_size, args.text_length), device=device
-        )
+        seed_everything(seed, device)
+        model = MultimodalLoopTransformer(config)
+        input_ids = torch.randint(config.vocab_size, (args.batch_size, args.text_length))
         images = None
         if not args.text_only:
             images = torch.randn(
@@ -105,14 +105,21 @@ def main() -> None:
                 config.num_channels,
                 config.image_size,
                 config.image_size,
-                device=device,
             )
+        model.to(device)
+        input_ids = input_ids.to(device)
+        images = None if images is None else images.to(device)
+        optimizer_options = {} if device.type == "cpu" else {"foreach": False, "fused": False}
         optimizer = torch.optim.AdamW(
-            model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+            model.parameters(),
+            lr=args.learning_rate,
+            weight_decay=args.weight_decay,
+            **optimizer_options,
         )
         recurrence_depth = args.recurrence_depth
         completed_steps = 0
     mode = "text-only" if images is None else "multimodal"
+    print(f"Runtime: {runtime_metadata(device)}")
     print(
         f"Fixed synthetic batch: mode={mode}, device={device}, seed={seed}, "
         f"recurrence_depth={recurrence_depth}, question_length={question_length}"

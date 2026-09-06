@@ -78,6 +78,23 @@ def test_ignored_logits_do_not_change_answer_loss() -> None:
     )
 
 
+@pytest.mark.parametrize("unused_score", [float("nan"), float("inf"), -float("inf"), 10.0])
+def test_fixed_shape_mask_matches_selected_loss_and_gradients(unused_score: float) -> None:
+    ids = torch.tensor([[0, 1, 0, 3], [1, 2, 3, 0]])
+    mask = torch.tensor([[False, False, True, True], [False, True, False, False]])
+    logits = torch.arange(32, dtype=torch.float64).reshape(2, 4, 4) / 10
+    logits[:, :-1].masked_fill_(~mask[:, 1:].unsqueeze(-1), unused_score)
+    logits.requires_grad_()
+    selected = mask[:, 1:]
+    reference = torch.nn.functional.cross_entropy(logits[:, :-1][selected], ids[:, 1:][selected])
+    actual = shifted_cross_entropy(logits, ids, target_mask=mask)
+    torch.testing.assert_close(actual, reference)
+    expected_grad = torch.autograd.grad(reference, logits, retain_graph=True)[0]
+    actual_grad = torch.autograd.grad(actual, logits)[0]
+    torch.testing.assert_close(actual_grad, expected_grad)
+    assert torch.isfinite(actual_grad).all()
+
+
 @pytest.mark.parametrize("index_dtype", [torch.int32, torch.int64])
 def test_noncontiguous_inputs_are_preserved(index_dtype: torch.dtype) -> None:
     input_ids = torch.tensor(

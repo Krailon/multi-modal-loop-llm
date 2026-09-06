@@ -437,13 +437,58 @@ def test_script_can_save_a_new_run_and_resume_without_overwriting(tmp_path: Path
             ),
             "new run settings",
         ),
-        (("--resume", "missing.pt", "--device", "cuda"), "CPU only"),
-        (("--save-checkpoint", "unused.pt", "--device", "cuda"), "CPU only"),
+        (("--resume", "missing.pt", "--device", "meta"), "supported devices"),
+        (("--save-checkpoint", "unused.pt", "--device", "meta"), "supported devices"),
     ],
 )
-def test_script_rejects_resume_overrides_and_non_cpu_checkpoints(
+def test_script_rejects_resume_overrides_and_unsupported_devices(
     arguments: tuple[str, ...], message: str
 ) -> None:
     result = run_script(*arguments)
     assert result.returncode == 2
     assert message in result.stderr
+
+
+@pytest.mark.parametrize("version", [1, 2])
+def test_checkpoint_versions_load_on_cpu(tmp_path, model, version):
+    path = tmp_path / "version.pt"
+    save_checkpoint(
+        path, model, adamw(model), completed_steps=0, input_ids=torch.tensor([[0, 1, 2]])
+    )
+    payload = torch.load(path, weights_only=True)
+    assert payload["format_version"] == 2
+    assert payload["backend"] == "cpu"
+    assert payload["device_rng_state"] is None
+    assert isinstance(payload["runtime"]["torch"], str)
+    if version == 1:
+        payload["format_version"] = 1
+        for key in ("backend", "device_rng_state", "runtime"):
+            del payload[key]
+        torch.save(payload, path)
+    restored = load_checkpoint(path, device="cpu")
+    assert_equal(restored.model.state_dict(), model.state_dict())
+    with pytest.raises(ValueError, match="backend"):
+        load_checkpoint(path, device="cuda")
+
+
+@pytest.mark.parametrize(
+    "change, message",
+    [
+        (lambda p: p.pop("backend"), "missing fields"),
+        (lambda p: p.update(backend="meta"), "backend"),
+        (lambda p: p.update(device_rng_state=3), "accelerator RNG"),
+        (lambda p: p.update(runtime={"torch": 2}), "runtime metadata"),
+    ],
+)
+def test_invalid_runtime_metadata_preserves_rng(tmp_path, model, change, message):
+    path = tmp_path / "invalid_runtime.pt"
+    save_checkpoint(
+        path, model, adamw(model), completed_steps=0, input_ids=torch.tensor([[0, 1, 2]])
+    )
+    payload = torch.load(path, weights_only=True)
+    change(payload)
+    torch.save(payload, path)
+    original = rng_state()
+    with pytest.raises(ValueError, match=message):
+        load_checkpoint(path)
+    assert_equal(rng_state(), original)

@@ -63,7 +63,11 @@ def shifted_cross_entropy(
         selected = target_mask[:, 1:]
         if not selected.any():
             raise ValueError("target_mask must select at least one next-token target")
-        predictions = predictions[selected]
-        targets = targets[selected]
+        # Keep shapes independent of mask values for XLA. -100 is CE's
+        # ignore_index; vocabulary ID zero remains an ordinary target.
+        # Clear ignored scores as well, so nonfinite unused logits cannot
+        # produce NaN gradients through log_softmax's backward pass.
+        predictions = predictions.masked_fill(~selected.unsqueeze(-1), 0)
+        targets = targets.masked_fill(~selected, -100)
 
     return F.cross_entropy(predictions.reshape(-1, logits.shape[2]), targets.reshape(-1))
