@@ -7,6 +7,34 @@ from torch import Tensor, nn
 from multimodal_loop.model.config import ModelConfig
 
 
+def _validate_hidden_states(x: Tensor, d_model: int) -> None:
+    """Check the shared hidden-state contract before attention or normalization."""
+    if x.ndim != 3:
+        raise ValueError(
+            f"x must have rank 3 [batch, seq_len, d_model], got shape {tuple(x.shape)}"
+        )
+    if x.shape[2] != d_model:
+        raise ValueError(f"x must have width d_model={d_model}, got {x.shape[2]}")
+    if x.shape[1] <= 0:
+        raise ValueError("x must have a positive sequence length")
+    if not x.is_floating_point():
+        raise TypeError(f"x must have a floating-point dtype, got {x.dtype}")
+
+
+def _validate_attention_mask(mask: Tensor, seq_len: int, device: torch.device) -> None:
+    """Check a shared boolean mask, including for stacks with no blocks."""
+    if mask.shape != (seq_len, seq_len):
+        raise ValueError(
+            f"attention_mask must have shape {(seq_len, seq_len)}, got {tuple(mask.shape)}"
+        )
+    if mask.dtype != torch.bool:
+        raise TypeError(f"attention_mask must have boolean dtype, got {mask.dtype}")
+    if mask.device != device:
+        raise ValueError("attention_mask must be on the same device as x")
+    if not mask.any(dim=-1).all():
+        raise ValueError("attention_mask must allow at least one key per query")
+
+
 def build_causal_mask(seq_len: int, *, device: torch.device | str | None = None) -> Tensor:
     """Return a boolean ``[seq_len, seq_len]`` causal attention mask.
 
@@ -81,34 +109,13 @@ class SelfAttention(nn.Module):
         implicit transfers or casts. Only transformed representations are
         returned, without attention weights or a residual connection.
         """
-        if x.ndim != 3:
-            raise ValueError(
-                f"x must have rank 3 [batch, seq_len, d_model], got shape {tuple(x.shape)}"
-            )
+        _validate_hidden_states(x, self.config.d_model)
         batch_size, seq_len, width = x.shape
-        if width != self.config.d_model:
-            raise ValueError(f"x must have width d_model={self.config.d_model}, got {width}")
-        if seq_len <= 0:
-            raise ValueError("x must have a positive sequence length")
-        if not x.is_floating_point():
-            raise TypeError(f"x must have a floating-point dtype, got {x.dtype}")
 
         if attention_mask is None:
             attention_mask = build_causal_mask(seq_len, device=x.device)
         else:
-            if attention_mask.shape != (seq_len, seq_len):
-                raise ValueError(
-                    f"attention_mask must have shape {(seq_len, seq_len)}, "
-                    f"got {tuple(attention_mask.shape)}"
-                )
-            if attention_mask.dtype != torch.bool:
-                raise TypeError(
-                    f"attention_mask must have boolean dtype, got {attention_mask.dtype}"
-                )
-            if attention_mask.device != x.device:
-                raise ValueError("attention_mask must be on the same device as x")
-            if not attention_mask.any(dim=-1).all():
-                raise ValueError("attention_mask must allow at least one key per query")
+            _validate_attention_mask(attention_mask, seq_len, x.device)
 
         # [B, T, 3 * d_model] -> [3, B, n_heads, T, head_dim]
         qkv = self.qkv_proj(x).reshape(

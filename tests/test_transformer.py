@@ -1,4 +1,4 @@
-"""Correctness checks for a single transformer block."""
+"""Correctness checks for transformer blocks and stacks."""
 
 from collections.abc import Iterator
 
@@ -8,7 +8,7 @@ from torch import Tensor, nn
 
 from multimodal_loop.model.attention import build_causal_mask, build_prefix_mask
 from multimodal_loop.model.config import ModelConfig
-from multimodal_loop.model.transformer import TransformerBlock
+from multimodal_loop.model.transformer import TransformerBlock, TransformerStack
 
 
 @pytest.fixture(autouse=True)
@@ -301,3 +301,136 @@ def test_mask_validation_is_delegated(mask: Tensor, error: type[Exception], mess
 
     with pytest.raises(error, match=message):
         block(torch.zeros(2, 4, 8, device="cpu"), mask)
+
+
+@pytest.mark.parametrize("num_layers", [0, 1, 3])
+@pytest.mark.parametrize("prefix_len", [None, 3])
+def test_stack_matches_ordered_reference_layers(num_layers: int, prefix_len: int | None) -> None:
+    config = ModelConfig(d_model=8, n_heads=2, d_ff=13)
+    stack = TransformerStack(config, num_layers).double().eval()
+    references = [pytorch_reference(block) for block in stack.blocks]
+    x = torch.randn(2, 5, 8, dtype=torch.float64)
+    mask = None if prefix_len is None else build_prefix_mask(5, prefix_len)
+    allowed = build_causal_mask(5) if mask is None else mask
+    expected = x
+    for reference in references:
+        expected = reference(expected, src_mask=~allowed)
+
+    torch.testing.assert_close(stack(x, mask), expected, rtol=1e-10, atol=1e-10)
+
+
+def test_stack_blocks_have_independent_parameters() -> None:
+    config = ModelConfig(d_model=8, n_heads=2, d_ff=13)
+    stack = TransformerStack(config, 3)
+    assert len(stack.blocks) == 3
+    block_parameter_count = sum(parameter.numel() for parameter in stack.blocks[0].parameters())
+    assert sum(parameter.numel() for parameter in stack.parameters()) == 3 * block_parameter_count
+
+    parameter_sets = [{id(parameter) for parameter in block.parameters()} for block in stack.blocks]
+    assert parameter_sets[0].isdisjoint(parameter_sets[1])
+    assert parameter_sets[0].isdisjoint(parameter_sets[2])
+    assert parameter_sets[1].isdisjoint(parameter_sets[2])
+    original = {name: tensor.clone() for name, tensor in stack.blocks[1].state_dict().items()}
+    with torch.no_grad():
+        for parameter in stack.blocks[0].parameters():
+            parameter.add_(1)
+    for name, tensor in stack.blocks[1].state_dict().items():
+        torch.testing.assert_close(tensor, original[name], rtol=0, atol=0)
+
+
+def test_empty_stack_has_no_parameters_and_preserves_identity_gradient() -> None:
+    stack = TransformerStack(ModelConfig(d_model=8, n_heads=2, d_ff=13), 0)
+    x = torch.randn(2, 5, 8, requires_grad=True)
+    original = x.detach().clone()
+
+    output = stack(x, build_prefix_mask(5, 3))
+    output.sum().backward()
+
+    assert list(stack.parameters()) == []
+    assert not stack.state_dict()
+    assert output is x
+    torch.testing.assert_close(x, original, rtol=0, atol=0)
+    torch.testing.assert_close(x.grad, torch.ones_like(x), rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("num_layers", [0, 2])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+def test_stack_cpu_dtype_noncontiguous_inputs_and_gradients(
+    num_layers: int, dtype: torch.dtype
+) -> None:
+    stack = TransformerStack(ModelConfig(d_model=8, n_heads=2, d_ff=13), num_layers).to(
+        device="cpu", dtype=dtype
+    )
+    x = torch.randn(2, 8, 5, device="cpu", dtype=dtype).transpose(1, 2).requires_grad_()
+    original = x.detach().clone()
+    assert not x.is_contiguous()
+
+    output = stack(x)
+    assert output.shape == x.shape
+    assert output.dtype == dtype
+    assert output.device == x.device
+    torch.testing.assert_close(output, stack(x.contiguous()))
+    output.square().mean().backward()
+
+    for name, tensor in [("input", x), *stack.named_parameters()]:
+        assert tensor.grad is not None, name
+        assert torch.isfinite(tensor.grad).all(), name
+        assert torch.count_nonzero(tensor.grad) > 0, name
+    torch.testing.assert_close(x, original, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("num_layers", [True, False, 1.0, 1.5, "2", None])
+def test_stack_layer_count_requires_an_integer(num_layers: object) -> None:
+    with pytest.raises(TypeError, match="num_layers must be an integer"):
+        TransformerStack(ModelConfig(), num_layers)
+
+
+def test_stack_layer_count_must_be_nonnegative() -> None:
+    with pytest.raises(ValueError, match="num_layers must be nonnegative"):
+        TransformerStack(ModelConfig(), -1)
+
+
+@pytest.mark.parametrize("num_layers", [0, 2])
+@pytest.mark.parametrize(
+    ("shape", "message"),
+    [((4, 8), "rank 3"), ((2, 4, 7), "width d_model=8"), ((2, 0, 8), "positive sequence length")],
+)
+def test_stack_validates_input_shape_even_when_empty(
+    num_layers: int, shape: tuple[int, ...], message: str
+) -> None:
+    stack = TransformerStack(ModelConfig(d_model=8, n_heads=2, d_ff=13), num_layers)
+
+    with pytest.raises(ValueError, match=message):
+        stack(torch.zeros(shape))
+
+
+@pytest.mark.parametrize("num_layers", [0, 2])
+@pytest.mark.parametrize("dtype", [torch.int64, torch.bool, torch.complex64])
+def test_stack_validates_input_dtype_even_when_empty(num_layers: int, dtype: torch.dtype) -> None:
+    stack = TransformerStack(ModelConfig(d_model=8, n_heads=2, d_ff=13), num_layers)
+
+    with pytest.raises(TypeError, match="floating-point dtype"):
+        stack(torch.zeros(2, 4, 8, dtype=dtype))
+
+
+@pytest.mark.parametrize("num_layers", [0, 2])
+@pytest.mark.parametrize(
+    ("mask", "error", "message"),
+    [
+        (torch.ones(1, 4, 4, dtype=torch.bool), ValueError, "attention_mask must have shape"),
+        (torch.ones(4, 4), TypeError, "attention_mask must have boolean dtype"),
+        (torch.zeros(4, 4, dtype=torch.bool), ValueError, "at least one key per query"),
+        (
+            torch.ones(4, 4, dtype=torch.bool, device="meta"),
+            ValueError,
+            "attention_mask must be on the same device as x",
+        ),
+    ],
+)
+def test_stack_validates_masks_even_when_empty(
+    num_layers: int, mask: Tensor, error: type[Exception], message: str
+) -> None:
+    stack = TransformerStack(ModelConfig(d_model=8, n_heads=2, d_ff=13), num_layers)
+
+    with pytest.raises(error, match=message):
+        stack(torch.zeros(2, 4, 8, device="cpu"), mask)

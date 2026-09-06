@@ -10,7 +10,7 @@ class ModelConfig:
 
     ``max_seq_len`` limits the combined visual and text sequence length.
     ``recurrence_depth`` is the default number of applications of the shared
-    recurrent stack; the full model will allow overriding it at runtime.
+    recurrent stack; ``RecurrentTransformerCore`` accepts runtime overrides.
     Recurrence sampling policies belong to training configuration.
 
     Images have a fixed square size and use non-overlapping square patches.

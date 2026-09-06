@@ -254,9 +254,9 @@ class MultimodalLoopTransformer(nn.Module):
         self.text_embed = TokenEmbedding(config)
         self.image_embed = PatchEmbedding(config)
 
-        self.prelude = TransformerStack(config)
+        self.prelude = TransformerStack(config, config.n_prelude_layers)
         self.core = RecurrentTransformerCore(config)
-        self.coda = TransformerStack(config)
+        self.coda = TransformerStack(config, config.n_coda_layers)
 
         self.lm_head = LMHead(config)
 
@@ -277,8 +277,7 @@ class MultimodalLoopTransformer(nn.Module):
 
         x = self.prelude(x, attention_mask)
 
-        for _ in range(recurrence_depth):
-            x = self.core(x, attention_mask)
+        x = self.core(x, attention_mask, recurrence_depth=recurrence_depth)
 
         x = self.coda(x, attention_mask)
 
@@ -366,8 +365,8 @@ positional embeddings remain a separate component.
 # Repository Structure
 
 Importable code lives under `src/multimodal_loop/`. Configuration, patch
-embedding, attention-mask helpers, self-attention, and a single transformer
-block are implemented. The remaining model, data, training, and evaluation
+embedding, attention-mask helpers, self-attention, transformer blocks/stacks,
+and the recurrent core are implemented. The remaining model, data, training, and evaluation
 components are scaffolding for subsequent increments.
 
 ```text
@@ -515,20 +514,67 @@ modules use `config.layer_norm_eps` and independent affine parameters.
 as well as attention-probability dropout inside `SelfAttention`. Calling `.eval()`
 disables all dropout. The block returns `y` directly.
 
-This conventional block is the building unit for future stacks and the shared
-recurrent core. Positional embeddings and recurrence are separate components.
+`TransformerStack(config, num_layers)` constructs that many independent blocks
+and applies them in order with `forward(x, attention_mask=None)`. It forwards
+the same mask to every block and returns the final `[batch, seq_len, d_model]`
+representation directly. There is no additional normalization or residual
+connection around the stack.
+
+The explicit layer count must be a nonnegative integer, excluding booleans.
+A zero-layer stack is a parameter-free identity, supporting prelude or coda
+configurations with no blocks. It still validates input shapes, dtypes, and
+explicit masks. Stacks leave the input unchanged and use normal PyTorch device
+and dtype handling.
 
 ---
 
 ## `model/recurrent_core.py`
 
-Contains the repeated transformation:
+`RecurrentTransformerCore(config)` owns one `TransformerStack` with
+`config.n_recurrent_layers` independent blocks. Its
+`forward(x, attention_mask=None, *, recurrence_depth=None)` method applies the
+whole stack repeatedly:
 
 $$
 h_{r+1}=F_\theta(h_r)
 $$
 
-The same parameters are reused across recurrent steps.
+The same stack parameters are reused at every recurrent step. The core owns
+the repetition loop, so the top-level model calls it once with the requested
+depth. An omitted depth uses `config.recurrence_depth`; overrides must be
+positive integers, excluding booleans, and may exceed that default.
+
+The same mask is passed on every repetition, and the complete autograd graph
+is preserved through all steps. Training dropout uses normal random draws on
+each repetition, while `.eval()` disables it. The core returns only the final
+state, preserving `[batch, seq_len, d_model]` and leaving the input unchanged.
+Changing runtime depth changes the computation count without changing parameter
+identities, parameter count, state-dictionary structure, or configuration.
+
+Once assembled, the model's total block applications per forward pass will be:
+
+```text
+n_prelude_layers + recurrence_depth * n_recurrent_layers + n_coda_layers
+```
+
+For example, two blocks in the recurrent stack repeated five times execute ten
+block applications using the parameters of just those two blocks. Depth sampling
+policies remain a separate training concern.
+
+```python
+import torch
+
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.recurrent_core import RecurrentTransformerCore
+
+config = ModelConfig(n_recurrent_layers=2)
+core = RecurrentTransformerCore(config)
+hidden = torch.randn(2, 6, config.d_model, requires_grad=True)
+output = core(hidden, recurrence_depth=5)
+
+assert output.shape == hidden.shape
+output.square().mean().backward()
+```
 
 This module will eventually become one of the primary areas of architectural research.
 
@@ -992,12 +1038,13 @@ These projects provide useful reference implementations and experimental precede
 **Phase:** Milestone 0 — infrastructure and correctness, in progress.
 
 Validated model configuration, direct image patch embeddings, causal/prefix
-attention-mask helpers, multi-head self-attention, and a single transformer
-block are implemented. Tests cover patch ordering, projection, input validation,
-gradient flow, attention-math and PyTorch block-reference agreement, residual
-identity, causal/prefix isolation, and dropout behavior. Embeddings for text,
-positions, and modalities, transformer stacks, the recurrent core, complete model,
-training, and checkpoint support remain to be implemented.
+attention-mask helpers, multi-head self-attention, transformer blocks/stacks,
+and the recurrent core are implemented. Tests cover patch ordering, projection,
+input validation, attention-math and PyTorch block-reference agreement, residual
+identity, causal/prefix isolation, dropout behavior, runtime depth, parameter
+sharing, and full gradient accumulation across repetitions. Embeddings for text,
+positions, and modalities, complete-model assembly, training, and checkpoint
+support remain to be implemented.
 
 ## Local development
 
@@ -1044,7 +1091,7 @@ If formatting needs to change, run `ruff format .`.
 The larger dimensions in Initial Model Scale describe later experiments, not the
 current defaults. `max_seq_len` is the eventual combined visual/text sequence
 limit. `recurrence_depth` specifies the default number of applications of the
-shared recurrent stack; runtime overrides will be supported by the full model.
+shared recurrent stack; `RecurrentTransformerCore` accepts runtime overrides.
 
 ```python
 import torch
