@@ -251,8 +251,7 @@ class MultimodalLoopTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        self.text_embed = TokenEmbedding(config)
-        self.image_embed = PatchEmbedding(config)
+        self.embeddings = MultimodalEmbedding(config)
 
         self.prelude = TransformerStack(config, config.n_prelude_layers)
         self.core = RecurrentTransformerCore(config)
@@ -267,13 +266,7 @@ class MultimodalLoopTransformer(nn.Module):
         recurrence_depth=None,
         attention_mask=None,
     ):
-        text = self.text_embed(input_ids)
-
-        if images is not None:
-            vision = self.image_embed(images)
-            x = combine(vision, text)
-        else:
-            x = text
+        x = self.embeddings(input_ids, images)
 
         x = self.prelude(x, attention_mask)
 
@@ -358,16 +351,16 @@ Explicit masks must be boolean `[seq_len, seq_len]` tensors on the input device,
 with at least one allowed key in every query row. Inputs and parameters follow
 normal PyTorch device and dtype conventions, without implicit transfers or
 casts. `TransformerBlock` provides residual connections and normalization;
-positional embeddings remain a separate component.
+`MultimodalEmbedding` adds positional embeddings before the transformer stacks.
 
 ---
 
 # Repository Structure
 
-Importable code lives under `src/multimodal_loop/`. Configuration, patch
-embedding, attention-mask helpers, self-attention, transformer blocks/stacks,
-and the recurrent core are implemented. The remaining model, data, training, and evaluation
-components are scaffolding for subsequent increments.
+Importable code lives under `src/multimodal_loop/`. Configuration, patch and
+multimodal embeddings, attention-mask helpers, self-attention, transformer
+blocks/stacks, and the recurrent core are implemented. The remaining model,
+data, training, and evaluation components are scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -423,6 +416,7 @@ multimodal-loop/
     ├── test_attention_mask.py
     ├── test_attention.py
     ├── test_patch_embedding.py
+    ├── test_embeddings.py
     ├── test_transformer.py
     ├── test_recurrence.py
     └── test_model.py
@@ -447,14 +441,22 @@ Defines the complete `MultimodalLoopTransformer`.
 
 Responsibilities include:
 
-* connecting embeddings to the model
-* combining visual and text tokens
+* invoking shared multimodal embedding assembly
 * running the prelude
 * invoking recurrent computation
 * running the coda
 * producing model outputs
 
 This file should describe the architecture at the highest level rather than contain detailed implementations.
+
+---
+
+## `model/embeddings.py`
+
+`MultimodalEmbedding` combines optional image patches and required text tokens
+into one sequence. It adds learned 1D positional embeddings and two learned
+modality embeddings, then returns the state consumed by the transformer prelude.
+Sequence construction happens once, before recurrent computation.
 
 ---
 
@@ -1037,14 +1039,16 @@ These projects provide useful reference implementations and experimental precede
 
 **Phase:** Milestone 0 — infrastructure and correctness, in progress.
 
-Validated model configuration, direct image patch embeddings, causal/prefix
-attention-mask helpers, multi-head self-attention, transformer blocks/stacks,
-and the recurrent core are implemented. Tests cover patch ordering, projection,
-input validation, attention-math and PyTorch block-reference agreement, residual
-identity, causal/prefix isolation, dropout behavior, runtime depth, parameter
-sharing, and full gradient accumulation across repetitions. Embeddings for text,
-positions, and modalities, complete-model assembly, training, and checkpoint
-support remain to be implemented.
+Validated model configuration, direct image patch embeddings, shared image/text
+sequence construction with learned positional and modality embeddings,
+causal/prefix attention-mask helpers, multi-head self-attention, transformer
+blocks/stacks, and the recurrent core are implemented. Tests cover patch ordering,
+projection, exact embedding sums, sequence capacity, input validation,
+attention-math and PyTorch block-reference agreement, residual identity,
+causal/prefix isolation, dropout behavior, runtime depth, parameter sharing,
+and full gradient accumulation across repetitions. A text-output loss through
+the recurrent core also reaches the image embedding path. Complete-model
+assembly, training, and checkpoint support remain to be implemented.
 
 ## Local development
 
@@ -1089,9 +1093,10 @@ If formatting needs to change, run `ruff format .`.
 | `dropout`, `layer_norm_eps` | 0.0, 1e-5 |
 
 The larger dimensions in Initial Model Scale describe later experiments, not the
-current defaults. `max_seq_len` is the eventual combined visual/text sequence
-limit. `recurrence_depth` specifies the default number of applications of the
-shared recurrent stack; `RecurrentTransformerCore` accepts runtime overrides.
+current defaults. `max_seq_len` limits the combined visual/text sequence length
+in `MultimodalEmbedding`. `recurrence_depth` specifies the default number of
+applications of the shared recurrent stack; `RecurrentTransformerCore` accepts
+runtime overrides.
 
 ```python
 import torch
@@ -1112,13 +1117,47 @@ Each configuration accepts one fixed square image size, divisible by its square
 patch size. Input tensors must be floating point and shaped `[batch, channels,
 height, width]`. Patches are ordered left to right, then top to bottom; values
 within a patch are flattened in channel, row, column order. One shared linear
-projection with bias maps every patch to `d_model` features. Positional and
-modality embeddings will be added separately.
+projection with bias maps every patch to `d_model` features. `MultimodalEmbedding`
+adds positional and modality embeddings to these projected patches and to text.
 
 Inputs and module parameters follow normal PyTorch device and dtype conventions;
 patch embedding performs no implicit transfers or casts. Configurations are
 immutable and can be serialized with `dataclasses.asdict(config)` and rebuilt
 with `ModelConfig(**values)`.
+
+## Shared image/text embeddings
+
+`MultimodalEmbedding(config)` accepts `input_ids` shaped `[B, T]` and optional
+`images` shaped `[B, C, H, W]`, with one image per batch item. Text IDs must be
+`torch.int32` or `torch.int64`, with `T > 0` and values in `[0, vocab_size)`.
+Every vocabulary ID, including zero, is an ordinary trainable token; there is
+no padding behavior or automatic insertion of special tokens.
+
+The output layout is `[image patches][text tokens]`, shaped `[B, P + T, d_model]`,
+or `[B, T, d_model]` without images. Each token is the sum of its content embedding,
+a learned 1D positional embedding, and a learned modality embedding (text ID 0,
+image ID 1). Positions start at zero and continue across the whole sequence, so
+the first text position is `P` with an image and zero without one. All embedding
+tables use standard PyTorch initialization; assembly adds no scaling,
+normalization, or dropout.
+
+The actual output length may equal `max_seq_len`; exceeding it raises an error
+without truncation. A text-only call can still fit when the configured patch
+count exceeds that limit. Inputs must share the module's device, and images
+follow normal PyTorch dtype conventions without implicit transfers or casts.
+Mask construction remains separate, using the combined sequence length and the
+desired image/question prefix length.
+
+```python
+from multimodal_loop.model.embeddings import MultimodalEmbedding
+
+embeddings = MultimodalEmbedding(config)
+input_ids = torch.tensor([[0, 1, 2], [3, 4, 5]])
+state = embeddings(input_ids, images)
+
+assert state.shape == (2, 19, 64)  # 16 image patches, then 3 text tokens
+assert embeddings(input_ids).shape == (2, 3, 64)
+```
 
 Immediate objective:
 
