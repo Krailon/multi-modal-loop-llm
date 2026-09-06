@@ -375,9 +375,9 @@ casts. `TransformerBlock` provides residual connections and normalization;
 Importable code lives under `src/multimodal_loop/`. Configuration, patch and
 multimodal embeddings, attention-mask helpers, self-attention, transformer
 blocks/stacks, the recurrent core, and the complete language-model composition
-are implemented, along with shifted language loss and a minimal tensor-batch
-training loop. Data, evaluation, and training-policy components remain
-scaffolding for subsequent increments.
+are implemented, along with shifted language loss, a minimal tensor-batch
+training loop, and CPU checkpoint/resume support. Data, evaluation, and
+training-policy components remain scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -412,6 +412,7 @@ multimodal-loop/
 │       │   └── collator.py
 │       ├── train/
 │       │   ├── __init__.py
+│       │   ├── checkpoint.py
 │       │   ├── trainer.py
 │       │   ├── recurrence.py
 │       │   ├── losses.py
@@ -438,7 +439,8 @@ multimodal-loop/
     ├── test_recurrence.py
     ├── test_model.py
     ├── test_losses.py
-    └── test_trainer.py
+    ├── test_trainer.py
+    └── test_checkpoint.py
 ```
 
 ---
@@ -616,6 +618,17 @@ boolean mask selects target token positions before shifting.
 It constructs compatible attention and supervision masks from a shared question
 length, clears parameter gradients on every step, and retains the caller's
 optimizer state across calls. This is the Milestone 0 training smoke path.
+
+---
+
+## `train/checkpoint.py`
+
+`save_checkpoint` writes configuration, model and AdamW state, the fixed tensor
+batch, completed steps, training settings, and global RNG states to a single
+versioned `.pt` file. `load_checkpoint` reconstructs a CPU model and optimizer
+and returns them in `LoadedCheckpoint` with the saved batch and progress.
+RNG restoration happens after object construction so initialization cannot
+consume the resumed random sequence.
 
 ---
 
@@ -1076,7 +1089,7 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 0 — infrastructure and correctness, in progress.
+**Phase:** Milestone 0 — infrastructure and correctness, complete for the CPU baseline.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1092,7 +1105,11 @@ recurrence and final output logits, while positive controls verify that context
 can influence answer predictions. Shifted cross-entropy, answer-target masking,
 and a small AdamW training script are implemented and tested on fixed synthetic
 batches, including loss reduction and optimizer-state continuity across calls.
-Checkpoint save/load and deterministic training resume remain to be implemented.
+CPU checkpoint save/load and deterministic training resume are implemented.
+Tests compare uninterrupted and resumed training with dropout enabled, including
+exact loss, parameter, optimizer-state, and RNG equality across process restarts.
+The package also builds and installs as a wheel, with imports, training, and a
+checkpoint round trip verified outside the source checkout.
 
 ## Local development
 
@@ -1321,8 +1338,93 @@ backward or an optimizer update. The caller owns tensor placement, optimizer
 settings, and RNG state; the loop retains optimizer history across calls.
 
 Recurrence depth is fixed per call, with `None` selecting the model default.
-Scheduling, clipping, gradient accumulation, mixed precision, recurrence
-sampling, and checkpoint persistence remain subsequent work.
+Scheduling, clipping, gradient accumulation, mixed precision, and recurrence
+sampling remain subsequent work.
+
+## Checkpoints and deterministic CPU resume
+
+Save after five optimizer updates, then run five additional updates:
+
+```bash
+python scripts/train.py --steps 5 --save-checkpoint checkpoints/smoke.pt
+python scripts/train.py --resume checkpoints/smoke.pt --steps 5 \
+    --save-checkpoint checkpoints/smoke.pt
+```
+
+`--steps` always counts updates for the current invocation. In this example,
+the resumed run prints steps 6 through 10 and saves `completed_steps=10`.
+Saving is opt-in: omitting `--save-checkpoint` leaves the original file unchanged.
+The script saves only after all requested updates finish successfully.
+
+On resume, the saved batch, question length, recurrence depth, and optimizer
+settings determine the continuation. The script does not regenerate data or
+reseed. Explicit new-run settings such as `--seed`, `--text-only`,
+`--learning-rate`, or `--recurrence-depth` are rejected with `--resume`.
+`--steps`, `--save-checkpoint`, and CPU device selection remain available.
+
+Version 1 checkpoints contain:
+
+* Format version, `ModelConfig` values, model dtype and train/eval mode, and
+  model weights.
+* AdamW state and hyperparameters, completed optimizer steps, the actual text
+  and optional image tensors, question length, effective recurrence depth, and
+  the original seed when supplied.
+* Python `random`, NumPy's global RNG (including its Gaussian cache), and
+  PyTorch CPU RNG states.
+
+Files contain tensors and ordinary Python values and load with
+`torch.load(..., map_location="cpu", weights_only=True)`. Writes use a temporary
+file in the destination directory and atomic replacement; a failed write leaves
+an existing checkpoint intact. Checkpoints represent completed optimizer-step
+boundaries, including step zero. Gradients are omitted because the next training
+step clears them.
+
+The public helpers are `save_checkpoint(path, model, optimizer, *,
+completed_steps, input_ids, images=None, question_length=0,
+recurrence_depth=None, seed=None)` and `load_checkpoint(path)`.
+The loader returns a `LoadedCheckpoint` with the model, optimizer, completed
+steps, batch tensors, question length, effective recurrence depth, and seed.
+For example, after creating the file above:
+
+```python
+from multimodal_loop.train.checkpoint import load_checkpoint, save_checkpoint
+from multimodal_loop.train.trainer import train_on_batch
+
+checkpoint = load_checkpoint("checkpoints/smoke.pt")
+losses = train_on_batch(
+    checkpoint.model,
+    checkpoint.optimizer,
+    checkpoint.input_ids,
+    checkpoint.images,
+    steps=5,
+    question_length=checkpoint.question_length,
+    recurrence_depth=checkpoint.recurrence_depth,
+)
+save_checkpoint(
+    "checkpoints/continued.pt",
+    checkpoint.model,
+    checkpoint.optimizer,
+    completed_steps=checkpoint.completed_steps + len(losses),
+    input_ids=checkpoint.input_ids,
+    images=checkpoint.images,
+    question_length=checkpoint.question_length,
+    recurrence_depth=checkpoint.recurrence_depth,
+    seed=checkpoint.seed,
+)
+```
+
+The loader rebuilds the model in its saved dtype, strictly restores weights and
+optimizer state, restores train/eval mode, and restores RNG states last. Resume
+training immediately after loading to retain that random sequence.
+
+Exact continuation is tested on CPU float32/float64 in the same software,
+hardware, and execution environment. The supported baseline has all parameters
+trainable, a uniform train/eval mode, and one AdamW parameter group containing
+all model parameters in their original order. Unsupported devices, dtypes,
+optimizer layouts, and format versions raise errors. CUDA/XLA RNG, independent
+random generators, data-loader state, schedulers, and mixed-precision state are
+outside version 1. These checks establish the CPU infrastructure baseline for
+Milestone 0; visual reasoning experiments belong to Milestone 1.
 
 Immediate objective:
 
