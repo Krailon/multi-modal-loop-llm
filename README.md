@@ -375,8 +375,9 @@ casts. `TransformerBlock` provides residual connections and normalization;
 Importable code lives under `src/multimodal_loop/`. Configuration, patch and
 multimodal embeddings, attention-mask helpers, self-attention, transformer
 blocks/stacks, the recurrent core, and the complete language-model composition
-are implemented. Data, training, and evaluation components are scaffolding for
-subsequent increments.
+are implemented, along with shifted language loss and a minimal tensor-batch
+training loop. Data, evaluation, and training-policy components remain
+scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -435,7 +436,9 @@ multimodal-loop/
     ├── test_embeddings.py
     ├── test_transformer.py
     ├── test_recurrence.py
-    └── test_model.py
+    ├── test_model.py
+    ├── test_losses.py
+    └── test_trainer.py
 ```
 
 ---
@@ -603,9 +606,22 @@ This module will eventually become one of the primary areas of architectural res
 
 ---
 
+## `train/losses.py` and `train/trainer.py`
+
+`shifted_cross_entropy` aligns image-first vocabulary logits with next-token
+text targets and averages over selected targets across the batch. An optional
+boolean mask selects target token positions before shifting.
+
+`train_on_batch` repeats standard optimizer steps on one fixed tensor batch.
+It constructs compatible attention and supervision masks from a shared question
+length, clears parameter gradients on every step, and retains the caller's
+optimizer state across calls. This is the Milestone 0 training smoke path.
+
+---
+
 ## `train/recurrence.py`
 
-Controls the training-time recurrence policy.
+Reserved for future training-time recurrence policies.
 
 Examples may eventually include:
 
@@ -618,7 +634,9 @@ Examples may eventually include:
 * adaptive recurrence
 * learned halting
 
-Initially, a Huginn-like randomized recurrence strategy will serve as the baseline.
+Milestone 0 uses a fixed, explicit depth for each training call. A Huginn-like
+randomized recurrence strategy remains the intended baseline for later
+experiments, after the basic training and checkpoint path is validated.
 
 ---
 
@@ -1071,8 +1089,10 @@ and full gradient accumulation across repetitions. End-to-end tests use shifted
 language-token cross-entropy for text-only and multimodal inputs, including
 gradients to image pixels. Leakage tests verify protected states after every
 recurrence and final output logits, while positive controls verify that context
-can influence answer predictions. Training utilities and checkpoint support
-remain to be implemented.
+can influence answer predictions. Shifted cross-entropy, answer-target masking,
+and a small AdamW training script are implemented and tested on fixed synthetic
+batches, including loss reduction and optimizer-state continuity across calls.
+Checkpoint save/load and deterministic training resume remain to be implemented.
 
 ## Local development
 
@@ -1229,8 +1249,80 @@ loss.backward()
 assert images.grad is not None
 ```
 
-This increment provides model composition and correctness checks. Training
-utilities, generation, and checkpoint support remain subsequent work.
+## Minimal training smoke test
+
+Run these commands from the repository root in the installed environment:
+
+```bash
+python scripts/train.py
+python scripts/train.py --text-only
+python scripts/train.py --recurrence-depth 3 --steps 10
+```
+
+The script initializes a tiny model and one seeded random tensor batch, then
+repeats optimizer updates on that batch. The default multimodal mode has image
+patches, three question tokens, and five answer tokens per item. Text-only mode
+defaults to causal language modeling. Each run prints its mode, seed, device,
+question length, recurrence depth, and each step's loss before the update.
+Loss reduction here measures fitting a fixed batch; visual reasoning experiments
+remain part of Milestone 1.
+
+| Settings | Defaults |
+| --- | --- |
+| `--steps`, `--batch-size`, `--text-length` | 20, 2, 8 |
+| `--question-length` | 3 with images; 0 with `--text-only` |
+| `--recurrence-depth`, `--seed`, `--device` | 2, 0, cpu |
+| AdamW `--learning-rate`, `--weight-decay` | 0.001, 0.0 |
+
+Model dimensions use `ModelConfig()` defaults. The batch must fit `max_seq_len`,
+contain at least two text tokens, and leave at least one target after the
+question. `--question-length 0` selects fully causal attention even with images;
+a positive value also supports question-answer supervision in text-only mode.
+No external dataset or tokenizer is needed.
+
+The reusable loss interface is
+`shifted_cross_entropy(logits, input_ids, *, num_image_tokens=0, target_mask=None)`.
+
+It pairs `logits[:, num_image_tokens:-1]` with `input_ids[:, 1:]`. If supplied,
+`target_mask` is boolean `[B, T]`, aligned to text token IDs: `True` selects that
+token as a target. The helper shifts the mask with the targets, so the first
+text token is never supervised. Image logits, the final text logit, and masked
+targets contribute no loss. The result is the mean over selected tokens across
+the entire batch, and selecting no predictable targets raises an error. All
+IDs, including zero, remain ordinary vocabulary IDs; int32 IDs are converted to
+int64 for cross-entropy. Supervision masking does not provide padding attention
+support.
+
+Use the training loop with an explicitly owned optimizer:
+
+```python
+from multimodal_loop.train.trainer import train_on_batch
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.0)
+losses = train_on_batch(
+    model,
+    optimizer,
+    input_ids,
+    images,
+    steps=20,
+    question_length=2,
+    recurrence_depth=3,
+)
+```
+
+This example uses the model and tensors above. `question_length=0` supervises
+all text targets after the first input with causal attention. A positive length
+builds an image/question prefix mask and supervises only answers, including the
+first answer predicted from the final question input. All batch items share the
+same question length. The loop enables training mode and calls
+`zero_grad(set_to_none=True)`, forward, backward, and `optimizer.step()` on each
+iteration, returning detached Python loss values. A nonfinite loss raises before
+backward or an optimizer update. The caller owns tensor placement, optimizer
+settings, and RNG state; the loop retains optimizer history across calls.
+
+Recurrence depth is fixed per call, with `None` selecting the model default.
+Scheduling, clipping, gradient accumulation, mixed precision, recurrence
+sampling, and checkpoint persistence remain subsequent work.
 
 Immediate objective:
 
