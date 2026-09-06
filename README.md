@@ -244,7 +244,7 @@ Large-scale training should not begin until the recurrent mechanism demonstrates
 
 # Initial Architecture
 
-A simplified model interface may look like:
+The implemented model composes the components as follows:
 
 ```python
 class MultimodalLoopTransformer(nn.Module):
@@ -257,7 +257,8 @@ class MultimodalLoopTransformer(nn.Module):
         self.core = RecurrentTransformerCore(config)
         self.coda = TransformerStack(config, config.n_coda_layers)
 
-        self.lm_head = LMHead(config)
+        self.final_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
     def forward(
         self,
@@ -267,6 +268,8 @@ class MultimodalLoopTransformer(nn.Module):
         attention_mask=None,
     ):
         x = self.embeddings(input_ids, images)
+        if attention_mask is None:
+            attention_mask = build_causal_mask(x.shape[1], device=x.device)
 
         x = self.prelude(x, attention_mask)
 
@@ -274,10 +277,14 @@ class MultimodalLoopTransformer(nn.Module):
 
         x = self.coda(x, attention_mask)
 
-        return self.lm_head(x)
+        return self.lm_head(self.final_norm(x))
 ```
 
-This is intentionally only a conceptual skeleton.
+This is a condensed view of `MultimodalLoopTransformer` in
+`src/multimodal_loop/model/model.py`. The final LayerNorm operates independently
+at each sequence position. The vocabulary projection is bias-free and has
+independent weights from the text embeddings. Both use standard PyTorch
+initialization. The model returns raw logits for all image and text positions.
 
 The recurrent implementation, positional representations, masking scheme, initialization, and training dynamics are all expected to evolve.
 
@@ -318,9 +325,10 @@ Image and question tokens must never attend to any answer tokens.
 
 The diagram describes answer prediction. Actual attention masks index **input
 tokens** and include the diagonal: each input can attend to itself, and its
-output predicts the next token. Future training will shift targets by one
-position; for question answering, the final question input predicts the first
-answer token, with loss applied to answer targets.
+output predicts the next token. Loss computation is external to the model:
+callers shift targets by one position. For question answering, the final
+question input predicts the first answer token, with loss applied to answer
+targets.
 
 `build_causal_mask(seq_len, *, device=None)` and
 `build_prefix_mask(seq_len, prefix_len, *, device=None)` are implemented in
@@ -330,6 +338,13 @@ matching PyTorch's scaled dot-product attention convention. The prefix length
 counts all image/question input tokens. A zero-length prefix gives causal
 attention; a full-length prefix permits all attention. Each mask uses one
 prefix length shared across batch items, without padding handling.
+
+`MultimodalLoopTransformer` builds one causal mask when no mask is supplied,
+including for image inputs. To enable bidirectional image/question context,
+callers supply a prefix mask whose boundary excludes all answer inputs. The
+same mask is passed through the prelude, every recurrent step, and the coda.
+The model validates the mask's shape, dtype, device, and nonempty query rows;
+choosing the correct context boundary remains the caller's responsibility.
 
 The purpose of this masking scheme is to allow visual representations themselves to change during recurrent computation.
 
@@ -359,8 +374,9 @@ casts. `TransformerBlock` provides residual connections and normalization;
 
 Importable code lives under `src/multimodal_loop/`. Configuration, patch and
 multimodal embeddings, attention-mask helpers, self-attention, transformer
-blocks/stacks, and the recurrent core are implemented. The remaining model,
-data, training, and evaluation components are scaffolding for subsequent increments.
+blocks/stacks, the recurrent core, and the complete language-model composition
+are implemented. Data, training, and evaluation components are scaffolding for
+subsequent increments.
 
 ```text
 multimodal-loop/
@@ -437,7 +453,8 @@ and derives attention-head width, patch count, and flattened patch size.
 
 ## `model/model.py`
 
-Defines the complete `MultimodalLoopTransformer`.
+Defines `MultimodalLoopTransformer(config)` with
+`forward(input_ids, images=None, recurrence_depth=None, attention_mask=None)`.
 
 Responsibilities include:
 
@@ -445,9 +462,13 @@ Responsibilities include:
 * running the prelude
 * invoking recurrent computation
 * running the coda
-* producing model outputs
+* applying final normalization and projecting to vocabulary logits
 
-This file should describe the architecture at the highest level rather than contain detailed implementations.
+It returns `[batch, text_length, vocab_size]` for text only, or
+`[batch, num_patches + text_length, vocab_size]` with images. Logits preserve the
+image-first sequence layout. Loss computation, target shifting, and selecting
+supervised positions belong to callers. This module composes existing
+components and delegates input, mask, and recurrence-depth validation to them.
 
 ---
 
@@ -553,7 +574,7 @@ state, preserving `[batch, seq_len, d_model]` and leaving the input unchanged.
 Changing runtime depth changes the computation count without changing parameter
 identities, parameter count, state-dictionary structure, or configuration.
 
-Once assembled, the model's total block applications per forward pass will be:
+The model's total block applications per forward pass are:
 
 ```text
 n_prelude_layers + recurrence_depth * n_recurrent_layers + n_coda_layers
@@ -1042,13 +1063,16 @@ These projects provide useful reference implementations and experimental precede
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
 causal/prefix attention-mask helpers, multi-head self-attention, transformer
-blocks/stacks, and the recurrent core are implemented. Tests cover patch ordering,
-projection, exact embedding sums, sequence capacity, input validation,
+blocks/stacks, the recurrent core, and the complete model are implemented. Tests
+cover patch ordering, projection, exact embedding sums, sequence capacity, input validation,
 attention-math and PyTorch block-reference agreement, residual identity,
 causal/prefix isolation, dropout behavior, runtime depth, parameter sharing,
-and full gradient accumulation across repetitions. A text-output loss through
-the recurrent core also reaches the image embedding path. Complete-model
-assembly, training, and checkpoint support remain to be implemented.
+and full gradient accumulation across repetitions. End-to-end tests use shifted
+language-token cross-entropy for text-only and multimodal inputs, including
+gradients to image pixels. Leakage tests verify protected states after every
+recurrence and final output logits, while positive controls verify that context
+can influence answer predictions. Training utilities and checkpoint support
+remain to be implemented.
 
 ## Local development
 
@@ -1158,6 +1182,55 @@ state = embeddings(input_ids, images)
 assert state.shape == (2, 19, 64)  # 16 image patches, then 3 text tokens
 assert embeddings(input_ids).shape == (2, 3, 64)
 ```
+
+## Complete model and answer loss
+
+The complete model accepts the same text/image inputs as `MultimodalEmbedding`
+and enforces the same combined sequence limit. Runtime recurrence depth defaults
+to `config.recurrence_depth` and accepts positive integer overrides. Prelude and
+coda stacks may have zero layers. Device, dtype, and dropout behavior follow the
+existing components; `.eval()` disables dropout throughout the model.
+
+For causal text-only training, align `logits[:, :-1]` with `input_ids[:, 1:]`.
+For question answering, let `P` be the image patch count, `Q` the number of
+question tokens, and `T` the total text length. Align
+`logits[:, P + Q - 1 : P + T - 1]` with `input_ids[:, Q:]`. This includes the
+first answer prediction from the final question position and excludes losses
+on visual or question targets. The example uses a shared question length with
+`Q >= 1` and at least one answer token per batch item.
+
+```python
+import torch
+import torch.nn.functional as F
+
+from multimodal_loop.model.attention import build_prefix_mask
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.model import MultimodalLoopTransformer
+
+config = ModelConfig()
+model = MultimodalLoopTransformer(config)
+input_ids = torch.tensor([[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]])
+
+text_logits = model(input_ids)
+assert text_logits.shape == (2, 5, config.vocab_size)
+
+images = torch.randn(
+    2, config.num_channels, config.image_size, config.image_size, requires_grad=True
+)
+P, Q, T = config.num_patches, 2, input_ids.shape[1]
+mask = build_prefix_mask(P + T, P + Q, device=input_ids.device)
+logits = model(input_ids, images, recurrence_depth=3, attention_mask=mask)
+assert logits.shape == (2, P + T, config.vocab_size)
+
+answer_logits = logits[:, P + Q - 1 : P + T - 1]
+answer_targets = input_ids[:, Q:]
+loss = F.cross_entropy(answer_logits.reshape(-1, config.vocab_size), answer_targets.reshape(-1))
+loss.backward()
+assert images.grad is not None
+```
+
+This increment provides model composition and correctness checks. Training
+utilities, generation, and checkpoint support remain subsequent work.
 
 Immediate objective:
 
