@@ -244,22 +244,21 @@ Large-scale training should not begin until the recurrent mechanism demonstrates
 
 # Initial Architecture
 
-A simplified model interface may look like:
+The implemented model composes the components as follows:
 
 ```python
 class MultimodalLoopTransformer(nn.Module):
-
     def __init__(self, config):
         super().__init__()
 
-        self.text_embed = TokenEmbedding(config)
-        self.image_embed = PatchEmbedding(config)
+        self.embeddings = MultimodalEmbedding(config)
 
-        self.prelude = TransformerStack(config)
+        self.prelude = TransformerStack(config, config.n_prelude_layers)
         self.core = RecurrentTransformerCore(config)
-        self.coda = TransformerStack(config)
+        self.coda = TransformerStack(config, config.n_coda_layers)
 
-        self.lm_head = LMHead(config)
+        self.final_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
     def forward(
         self,
@@ -268,25 +267,24 @@ class MultimodalLoopTransformer(nn.Module):
         recurrence_depth=None,
         attention_mask=None,
     ):
-        text = self.text_embed(input_ids)
-
-        if images is not None:
-            vision = self.image_embed(images)
-            x = combine(vision, text)
-        else:
-            x = text
+        x = self.embeddings(input_ids, images)
+        if attention_mask is None:
+            attention_mask = build_causal_mask(x.shape[1], device=x.device)
 
         x = self.prelude(x, attention_mask)
 
-        for _ in range(recurrence_depth):
-            x = self.core(x, attention_mask)
+        x = self.core(x, attention_mask, recurrence_depth=recurrence_depth)
 
         x = self.coda(x, attention_mask)
 
-        return self.lm_head(x)
+        return self.lm_head(self.final_norm(x))
 ```
 
-This is intentionally only a conceptual skeleton.
+This is a condensed view of `MultimodalLoopTransformer` in
+`src/multimodal_loop/model/model.py`. The final LayerNorm operates independently
+at each sequence position. The vocabulary projection is bias-free and has
+independent weights from the text embeddings. Both use standard PyTorch
+initialization. The model returns raw logits for all image and text positions.
 
 The recurrent implementation, positional representations, masking scheme, initialization, and training dynamics are all expected to evolve.
 
@@ -323,13 +321,63 @@ ANSWER 2 → IMAGE + QUESTION + ANSWER 1
 ANSWER 3 → IMAGE + QUESTION + ANSWER 1 + ANSWER 2
 ```
 
-Image and question tokens must never attend to future answer tokens.
+Image and question tokens must never attend to any answer tokens.
+
+The diagram describes answer prediction. Actual attention masks index **input
+tokens** and include the diagonal: each input can attend to itself, and its
+output predicts the next token. Loss computation is external to the model:
+callers shift targets by one position. For question answering, the final
+question input predicts the first answer token, with loss applied to answer
+targets.
+
+`build_causal_mask(seq_len, *, device=None)` and
+`build_prefix_mask(seq_len, prefix_len, *, device=None)` are implemented in
+`multimodal_loop.model.attention`. They return boolean `[seq_len, seq_len]`
+tensors with query rows and key columns. `True` means attention is allowed,
+matching PyTorch's scaled dot-product attention convention. The prefix length
+counts all image/question input tokens. A zero-length prefix gives causal
+attention; a full-length prefix permits all attention. Each mask uses one
+prefix length shared across batch items, without padding handling.
+
+`MultimodalLoopTransformer` builds one causal mask when no mask is supplied,
+including for image inputs. To enable bidirectional image/question context,
+callers supply a prefix mask whose boundary excludes all answer inputs. The
+same mask is passed through the prelude, every recurrent step, and the coda.
+The model validates the mask's shape, dtype, device, and nonempty query rows;
+choosing the correct context boundary remains the caller's responsibility.
 
 The purpose of this masking scheme is to allow visual representations themselves to change during recurrent computation.
 
+## Self-attention
+
+`SelfAttention(config)` in `multimodal_loop.model.attention` implements
+conventional multi-head self-attention. Its `forward(x, attention_mask=None)`
+method accepts floating-point `[batch, seq_len, d_model]` inputs and returns
+transformed representations with the same shape. Omitting the mask uses causal
+attention; supplying a prefix mask enables the multimodal behavior above.
+
+One learned linear projection produces queries, keys, and values for all heads.
+PyTorch's `scaled_dot_product_attention` computes attention, and a second linear
+projection combines the heads. Both projections use bias and standard PyTorch
+initialization. `config.dropout` controls attention-probability dropout during
+training; calling `.eval()` disables dropout.
+
+Explicit masks must be boolean `[seq_len, seq_len]` tensors on the input device,
+with at least one allowed key in every query row. Inputs and parameters follow
+normal PyTorch device and dtype conventions, without implicit transfers or
+casts. `TransformerBlock` provides residual connections and normalization;
+`MultimodalEmbedding` adds positional embeddings before the transformer stacks.
+
 ---
 
-# Proposed Repository Structure
+# Repository Structure
+
+Importable code lives under `src/multimodal_loop/`. Configuration, patch and
+multimodal embeddings, attention-mask helpers, self-attention, transformer
+blocks/stacks, the recurrent core, and the complete language-model composition
+are implemented, along with shifted language loss, a minimal tensor-batch
+training loop, and single-device checkpoint/resume support. Data, evaluation, and
+training-policy components remain scaffolding for subsequent increments.
 
 ```text
 multimodal-loop/
@@ -344,33 +392,38 @@ multimodal-loop/
 │   ├── tiny.yaml
 │   └── base.yaml
 │
-├── model/
-│   ├── __init__.py
-│   ├── config.py
-│   ├── embeddings.py
-│   ├── patch_embedding.py
-│   ├── attention.py
-│   ├── transformer.py
-│   ├── recurrent_core.py
-│   └── model.py
-│
-├── data/
-│   ├── synthetic_shapes.py
-│   ├── text.py
-│   ├── multimodal.py
-│   └── collator.py
-│
-├── train/
-│   ├── trainer.py
-│   ├── recurrence.py
-│   ├── losses.py
-│   └── schedules.py
-│
-├── eval/
-│   ├── synthetic.py
-│   ├── recurrence_sweep.py
-│   ├── stability.py
-│   └── diagnostics.py
+├── src/
+│   └── multimodal_loop/
+│       ├── __init__.py
+│       ├── model/
+│       │   ├── __init__.py
+│       │   ├── config.py
+│       │   ├── embeddings.py
+│       │   ├── patch_embedding.py
+│       │   ├── attention.py
+│       │   ├── transformer.py
+│       │   ├── recurrent_core.py
+│       │   └── model.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   ├── synthetic_shapes.py
+│       │   ├── text.py
+│       │   ├── multimodal.py
+│       │   └── collator.py
+│       ├── train/
+│       │   ├── __init__.py
+│       │   ├── runtime.py
+│       │   ├── checkpoint.py
+│       │   ├── trainer.py
+│       │   ├── recurrence.py
+│       │   ├── losses.py
+│       │   └── schedules.py
+│       └── eval/
+│           ├── __init__.py
+│           ├── synthetic.py
+│           ├── recurrence_sweep.py
+│           ├── stability.py
+│           └── diagnostics.py
 │
 ├── scripts/
 │   ├── train.py
@@ -378,30 +431,59 @@ multimodal-loop/
 │   └── generate_synthetic_data.py
 │
 └── tests/
+    ├── test_config.py
     ├── test_attention_mask.py
+    ├── test_attention.py
     ├── test_patch_embedding.py
+    ├── test_embeddings.py
+    ├── test_transformer.py
     ├── test_recurrence.py
-    └── test_model.py
+    ├── test_model.py
+    ├── test_losses.py
+    ├── test_trainer.py
+    └── test_checkpoint.py
 ```
 
 ---
 
 # Module Responsibilities
 
+The paths below are relative to `src/multimodal_loop/`.
+
+## `model/config.py`
+
+Defines the immutable `ModelConfig` dataclass, validates architecture settings,
+and derives attention-head width, patch count, and flattened patch size.
+
+---
+
 ## `model/model.py`
 
-Defines the complete `MultimodalLoopTransformer`.
+Defines `MultimodalLoopTransformer(config)` with
+`forward(input_ids, images=None, recurrence_depth=None, attention_mask=None)`.
 
 Responsibilities include:
 
-* connecting embeddings to the model
-* combining visual and text tokens
+* invoking shared multimodal embedding assembly
 * running the prelude
 * invoking recurrent computation
 * running the coda
-* producing model outputs
+* applying final normalization and projecting to vocabulary logits
 
-This file should describe the architecture at the highest level rather than contain detailed implementations.
+It returns `[batch, text_length, vocab_size]` for text only, or
+`[batch, num_patches + text_length, vocab_size]` with images. Logits preserve the
+image-first sequence layout. Loss computation, target shifting, and selecting
+supervised positions belong to callers. This module composes existing
+components and delegates input, mask, and recurrence-depth validation to them.
+
+---
+
+## `model/embeddings.py`
+
+`MultimodalEmbedding` combines optional image patches and required text tokens
+into one sequence. It adds learned 1D positional embeddings and two learned
+modality embeddings, then returns the state consumed by the transformer prelude.
+Sequence construction happens once, before recurrent computation.
 
 ---
 
@@ -440,29 +522,121 @@ Attention behavior should be independently testable.
 
 ## `model/transformer.py`
 
-Contains the basic transformer block used by the model.
+Defines `TransformerBlock(config)`, which adds normalization, a feed-forward
+network, and residual connections around `SelfAttention`. Its
+`forward(x, attention_mask=None)` method preserves `[batch, seq_len, d_model]`
+and leaves the input tensor unchanged. The attention layer supplies the causal
+default and validates explicit masks.
 
-Initially this should remain relatively conventional so that recurrence can be studied independently.
+Each branch uses its own trainable LayerNorm over the feature dimension, before
+computing its update:
+
+```text
+h = x + dropout_attention(SelfAttention(LayerNorm_attention(x), attention_mask))
+y = h + dropout_feedforward(FFN(LayerNorm_feedforward(h)))
+```
+
+The feed-forward network is `Linear(d_model, d_ff) -> GELU -> Linear(d_ff, d_model)`.
+Both projections use bias and standard PyTorch initialization. The two LayerNorm
+modules use `config.layer_norm_eps` and independent affine parameters.
+`config.dropout` controls dropout on each branch output before residual addition,
+as well as attention-probability dropout inside `SelfAttention`. Calling `.eval()`
+disables all dropout. The block returns `y` directly.
+
+`TransformerStack(config, num_layers)` constructs that many independent blocks
+and applies them in order with `forward(x, attention_mask=None)`. It forwards
+the same mask to every block and returns the final `[batch, seq_len, d_model]`
+representation directly. There is no additional normalization or residual
+connection around the stack.
+
+The explicit layer count must be a nonnegative integer, excluding booleans.
+A zero-layer stack is a parameter-free identity, supporting prelude or coda
+configurations with no blocks. It still validates input shapes, dtypes, and
+explicit masks. Stacks leave the input unchanged and use normal PyTorch device
+and dtype handling.
 
 ---
 
 ## `model/recurrent_core.py`
 
-Contains the repeated transformation:
+`RecurrentTransformerCore(config)` owns one `TransformerStack` with
+`config.n_recurrent_layers` independent blocks. Its
+`forward(x, attention_mask=None, *, recurrence_depth=None)` method applies the
+whole stack repeatedly:
 
 $$
 h_{r+1}=F_\theta(h_r)
 $$
 
-The same parameters are reused across recurrent steps.
+The same stack parameters are reused at every recurrent step. The core owns
+the repetition loop, so the top-level model calls it once with the requested
+depth. An omitted depth uses `config.recurrence_depth`; overrides must be
+positive integers, excluding booleans, and may exceed that default.
+
+The same mask is passed on every repetition, and the complete autograd graph
+is preserved through all steps. Training dropout uses normal random draws on
+each repetition, while `.eval()` disables it. The core returns only the final
+state, preserving `[batch, seq_len, d_model]` and leaving the input unchanged.
+Changing runtime depth changes the computation count without changing parameter
+identities, parameter count, state-dictionary structure, or configuration.
+
+The model's total block applications per forward pass are:
+
+```text
+n_prelude_layers + recurrence_depth * n_recurrent_layers + n_coda_layers
+```
+
+For example, two blocks in the recurrent stack repeated five times execute ten
+block applications using the parameters of just those two blocks. Depth sampling
+policies remain a separate training concern.
+
+```python
+import torch
+
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.recurrent_core import RecurrentTransformerCore
+
+config = ModelConfig(n_recurrent_layers=2)
+core = RecurrentTransformerCore(config)
+hidden = torch.randn(2, 6, config.d_model, requires_grad=True)
+output = core(hidden, recurrence_depth=5)
+
+assert output.shape == hidden.shape
+output.square().mean().backward()
+```
 
 This module will eventually become one of the primary areas of architectural research.
 
 ---
 
+## `train/losses.py` and `train/trainer.py`
+
+`shifted_cross_entropy` aligns image-first vocabulary logits with next-token
+text targets and averages over selected targets across the batch. An optional
+boolean mask selects target token positions before shifting.
+
+`train_on_batch` repeats standard optimizer steps on one fixed tensor batch.
+It constructs compatible attention and supervision masks from a shared question
+length, clears parameter gradients on every step, and retains the caller's
+optimizer state across calls. This is the Milestone 0 training smoke path.
+
+---
+
+## `train/checkpoint.py`
+
+`save_checkpoint` writes configuration, model and AdamW state, the fixed tensor
+batch, completed steps, training settings, and global RNG states to a single
+versioned `.pt` file. `load_checkpoint(path, device="cpu")` reconstructs a model and optimizer
+on the requested matching backend
+and returns them in `LoadedCheckpoint` with the saved batch and progress.
+RNG restoration happens after object construction so initialization cannot
+consume the resumed random sequence.
+
+---
+
 ## `train/recurrence.py`
 
-Controls the training-time recurrence policy.
+Reserved for future training-time recurrence policies.
 
 Examples may eventually include:
 
@@ -475,7 +649,9 @@ Examples may eventually include:
 * adaptive recurrence
 * learned halting
 
-Initially, a Huginn-like randomized recurrence strategy will serve as the baseline.
+Milestone 0 uses a fixed, explicit depth for each training call. A Huginn-like
+randomized recurrence strategy remains the intended baseline for later
+experiments, after the basic training and checkpoint path is validated.
 
 ---
 
@@ -769,6 +945,10 @@ Smaller 20–50M parameter configurations should be used during debugging.
 
 ## Milestone 0 — Infrastructure
 
+**Status: Complete.** CPU correctness and deterministic resume are verified,
+and single-device CUDA validation passed on Kaggle. TPU hardware validation is
+deferred and does not block milestone completion.
+
 * model runs forward and backward
 * image and text batches work
 * recurrent depth can change dynamically
@@ -915,11 +1095,480 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Architecture and experimental-design stage.
+**Phase:** Milestone 0 — infrastructure and correctness, officially complete.
 
-Immediate objective:
+**Next:** Milestone 1 — Synthetic vision: learn meaningful visual grounding from
+random initialization without a pretrained vision encoder.
 
-> Build a small end-to-end multimodal loop transformer and determine whether recurrent depth improves controlled synthetic visual reasoning.
+Validated model configuration, direct image patch embeddings, shared image/text
+sequence construction with learned positional and modality embeddings,
+causal/prefix attention-mask helpers, multi-head self-attention, transformer
+blocks/stacks, the recurrent core, and the complete model are implemented. Tests
+cover patch ordering, projection, exact embedding sums, sequence capacity, input validation,
+attention-math and PyTorch block-reference agreement, residual identity,
+causal/prefix isolation, dropout behavior, runtime depth, parameter sharing,
+and full gradient accumulation across repetitions. End-to-end tests use shifted
+language-token cross-entropy for text-only and multimodal inputs, including
+gradients to image pixels. Leakage tests verify protected states after every
+recurrence and final output logits, while positive controls verify that context
+can influence answer predictions. Shifted cross-entropy, answer-target masking,
+and a small AdamW training script are implemented and tested on fixed synthetic
+batches, including loss reduction and optimizer-state continuity across calls.
+CPU checkpoint save/load and deterministic training resume are implemented.
+Single-device CUDA/TPU training and same-backend resume paths are also implemented;
+single-device CUDA validation passed in a Kaggle 2×T4 environment. The
+user-confirmed hardware test result was `4 passed in 69.91s (0:01:09)`.
+TPU hardware validation is deferred and does not block Milestone 0 completion.
+CPU tests compare uninterrupted and resumed training with dropout enabled, including
+exact loss, parameter, optimizer-state, and RNG equality across process restarts.
+The package also builds and installs as a wheel, with imports, training, and a
+checkpoint round trip verified outside the source checkout.
+
+## Local development
+
+Python 3.11 or newer is required. For a local CPU development environment, run
+these commands from the repository root:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install "torch>=2.7,<3.0" --index-url https://download.pytorch.org/whl/cpu
+python -m pip install -e ".[dev]"
+```
+
+`pyproject.toml` is the authoritative dependency configuration. PyTorch is an
+optional dependency so that hosted environments such as Kaggle can retain their
+accelerator-specific installation. If compatible PyTorch is already installed,
+use that environment and run only the editable-install command above. The
+`requirements.txt` alternative includes the `torch` extra for local environments
+where pip should provide PyTorch.
+
+Run the checks in the activated environment:
+
+```bash
+pytest
+ruff check .
+ruff format --check .
+```
+
+If formatting needs to change, run `ruff format .`.
+
+## Configuration and patch embedding
+
+`ModelConfig()` uses deliberately tiny defaults for CPU correctness work:
+
+| Settings | Defaults |
+| --- | --- |
+| `vocab_size`, `max_seq_len` | 256, 128 |
+| `d_model`, `n_heads`, `d_ff` | 64, 4, 256 |
+| `n_prelude_layers`, `n_recurrent_layers`, `n_coda_layers` | 1, 1, 1 |
+| `recurrence_depth` | 2 |
+| `image_size`, `patch_size`, `num_channels` | 32, 8, 3 |
+| `dropout`, `layer_norm_eps` | 0.0, 1e-5 |
+
+The larger dimensions in Initial Model Scale describe later experiments, not the
+current defaults. `max_seq_len` limits the combined visual/text sequence length
+in `MultimodalEmbedding`. `recurrence_depth` specifies the default number of
+applications of the shared recurrent stack; `RecurrentTransformerCore` accepts
+runtime overrides.
+
+```python
+import torch
+
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.patch_embedding import PatchEmbedding
+
+config = ModelConfig()
+image_embed = PatchEmbedding(config)
+images = torch.randn(2, config.num_channels, config.image_size, config.image_size)
+tokens = image_embed(images)
+
+assert tokens.shape == (2, 16, 64)
+tokens.square().mean().backward()
+```
+
+Each configuration accepts one fixed square image size, divisible by its square
+patch size. Input tensors must be floating point and shaped `[batch, channels,
+height, width]`. Patches are ordered left to right, then top to bottom; values
+within a patch are flattened in channel, row, column order. One shared linear
+projection with bias maps every patch to `d_model` features. `MultimodalEmbedding`
+adds positional and modality embeddings to these projected patches and to text.
+
+Inputs and module parameters follow normal PyTorch device and dtype conventions;
+patch embedding performs no implicit transfers or casts. Configurations are
+immutable and can be serialized with `dataclasses.asdict(config)` and rebuilt
+with `ModelConfig(**values)`.
+
+## Shared image/text embeddings
+
+`MultimodalEmbedding(config)` accepts `input_ids` shaped `[B, T]` and optional
+`images` shaped `[B, C, H, W]`, with one image per batch item. Text IDs must be
+`torch.int32` or `torch.int64`, with `T > 0` and values in `[0, vocab_size)`.
+Every vocabulary ID, including zero, is an ordinary trainable token; there is
+no padding behavior or automatic insertion of special tokens.
+
+The output layout is `[image patches][text tokens]`, shaped `[B, P + T, d_model]`,
+or `[B, T, d_model]` without images. Each token is the sum of its content embedding,
+a learned 1D positional embedding, and a learned modality embedding (text ID 0,
+image ID 1). Positions start at zero and continue across the whole sequence, so
+the first text position is `P` with an image and zero without one. All embedding
+tables use standard PyTorch initialization; assembly adds no scaling,
+normalization, or dropout.
+
+The actual output length may equal `max_seq_len`; exceeding it raises an error
+without truncation. A text-only call can still fit when the configured patch
+count exceeds that limit. Inputs must share the module's device, and images
+follow normal PyTorch dtype conventions without implicit transfers or casts.
+Mask construction remains separate, using the combined sequence length and the
+desired image/question prefix length.
+
+```python
+from multimodal_loop.model.embeddings import MultimodalEmbedding
+
+embeddings = MultimodalEmbedding(config)
+input_ids = torch.tensor([[0, 1, 2], [3, 4, 5]])
+state = embeddings(input_ids, images)
+
+assert state.shape == (2, 19, 64)  # 16 image patches, then 3 text tokens
+assert embeddings(input_ids).shape == (2, 3, 64)
+```
+
+## Complete model and answer loss
+
+The complete model accepts the same text/image inputs as `MultimodalEmbedding`
+and enforces the same combined sequence limit. Runtime recurrence depth defaults
+to `config.recurrence_depth` and accepts positive integer overrides. Prelude and
+coda stacks may have zero layers. Device, dtype, and dropout behavior follow the
+existing components; `.eval()` disables dropout throughout the model.
+
+For causal text-only training, align `logits[:, :-1]` with `input_ids[:, 1:]`.
+For question answering, let `P` be the image patch count, `Q` the number of
+question tokens, and `T` the total text length. Align
+`logits[:, P + Q - 1 : P + T - 1]` with `input_ids[:, Q:]`. This includes the
+first answer prediction from the final question position and excludes losses
+on visual or question targets. The example uses a shared question length with
+`Q >= 1` and at least one answer token per batch item.
+
+```python
+import torch
+import torch.nn.functional as F
+
+from multimodal_loop.model.attention import build_prefix_mask
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.model import MultimodalLoopTransformer
+
+config = ModelConfig()
+model = MultimodalLoopTransformer(config)
+input_ids = torch.tensor([[0, 1, 2, 3, 4], [5, 6, 7, 8, 9]])
+
+text_logits = model(input_ids)
+assert text_logits.shape == (2, 5, config.vocab_size)
+
+images = torch.randn(
+    2, config.num_channels, config.image_size, config.image_size, requires_grad=True
+)
+P, Q, T = config.num_patches, 2, input_ids.shape[1]
+mask = build_prefix_mask(P + T, P + Q, device=input_ids.device)
+logits = model(input_ids, images, recurrence_depth=3, attention_mask=mask)
+assert logits.shape == (2, P + T, config.vocab_size)
+
+answer_logits = logits[:, P + Q - 1 : P + T - 1]
+answer_targets = input_ids[:, Q:]
+loss = F.cross_entropy(answer_logits.reshape(-1, config.vocab_size), answer_targets.reshape(-1))
+loss.backward()
+assert images.grad is not None
+```
+
+## Minimal training smoke test
+
+Run these commands from the repository root in the installed environment:
+
+```bash
+python scripts/train.py
+python scripts/train.py --text-only
+python scripts/train.py --recurrence-depth 3 --steps 10
+```
+
+The script initializes a tiny model and one seeded random tensor batch, then
+repeats optimizer updates on that batch. The default multimodal mode has image
+patches, three question tokens, and five answer tokens per item. Text-only mode
+defaults to causal language modeling. Each run prints its mode, seed, device,
+question length, recurrence depth, and each step's loss before the update.
+Loss reduction here measures fitting a fixed batch; visual reasoning experiments
+remain part of Milestone 1.
+
+| Settings | Defaults |
+| --- | --- |
+| `--steps`, `--batch-size`, `--text-length` | 20, 2, 8 |
+| `--question-length` | 3 with images; 0 with `--text-only` |
+| `--recurrence-depth`, `--seed`, `--device` | 2, 0, cpu |
+| AdamW `--learning-rate`, `--weight-decay` | 0.001, 0.0 |
+
+Model dimensions use `ModelConfig()` defaults. The batch must fit `max_seq_len`,
+contain at least two text tokens, and leave at least one target after the
+question. `--question-length 0` selects fully causal attention even with images;
+a positive value also supports question-answer supervision in text-only mode.
+No external dataset or tokenizer is needed.
+
+The reusable loss interface is
+`shifted_cross_entropy(logits, input_ids, *, num_image_tokens=0, target_mask=None)`.
+
+It pairs `logits[:, num_image_tokens:-1]` with `input_ids[:, 1:]`. If supplied,
+`target_mask` is boolean `[B, T]`, aligned to text token IDs: `True` selects that
+token as a target. The helper shifts the mask with the targets, so the first
+text token is never supervised. Image logits, the final text logit, and masked
+targets contribute no loss. The result is the mean over selected tokens across
+the entire batch, and selecting no predictable targets raises an error. All
+IDs, including zero, remain ordinary vocabulary IDs; int32 IDs are converted to
+int64 for cross-entropy. Supervision masking does not provide padding attention
+support.
+
+Use the training loop with an explicitly owned optimizer:
+
+```python
+from multimodal_loop.train.trainer import train_on_batch
+
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3, weight_decay=0.0)
+losses = train_on_batch(
+    model,
+    optimizer,
+    input_ids,
+    images,
+    steps=20,
+    question_length=2,
+    recurrence_depth=3,
+)
+```
+
+This example uses the model and tensors above. `question_length=0` supervises
+all text targets after the first input with causal attention. A positive length
+builds an image/question prefix mask and supervises only answers, including the
+first answer predicted from the final question input. All batch items share the
+same question length. The loop enables training mode and calls
+`zero_grad(set_to_none=True)`, forward, backward, and `optimizer.step()` on each
+iteration, returning detached Python loss values. A nonfinite loss raises before
+backward or an optimizer update. The caller owns tensor placement, optimizer
+settings, and RNG state; the loop retains optimizer history across calls.
+
+Recurrence depth is fixed per call, with `None` selecting the model default.
+Scheduling, clipping, gradient accumulation, mixed precision, and recurrence
+sampling remain subsequent work.
+
+## Checkpoints and deterministic CPU resume
+
+Save after five optimizer updates, then run five additional updates:
+
+```bash
+python scripts/train.py --steps 5 --save-checkpoint checkpoints/smoke.pt
+python scripts/train.py --resume checkpoints/smoke.pt --steps 5 \
+    --save-checkpoint checkpoints/smoke.pt
+```
+
+`--steps` always counts updates for the current invocation. In this example,
+the resumed run prints steps 6 through 10 and saves `completed_steps=10`.
+Saving is opt-in: omitting `--save-checkpoint` leaves the original file unchanged.
+The script saves only after all requested updates finish successfully.
+
+On resume, the saved batch, question length, recurrence depth, and optimizer
+settings determine the continuation. The script does not regenerate data or
+reseed. Explicit new-run settings such as `--seed`, `--text-only`,
+`--learning-rate`, or `--recurrence-depth` are rejected with `--resume`.
+`--steps`, `--save-checkpoint`, and `--device` remain available. The device must
+match the saved backend; the default remains CPU.
+
+Version 2 checkpoints contain:
+
+* Format version, `ModelConfig` values, model dtype and train/eval mode, and
+  model weights.
+* AdamW state and hyperparameters, completed optimizer steps, the actual text
+  and optional image tensors, question length, effective recurrence depth, and
+  the original seed when supplied.
+* Python `random`, NumPy's global RNG (including its Gaussian cache), and
+  PyTorch CPU RNG states, plus the selected CUDA or XLA device RNG state.
+* Backend identity and runtime versions for identifying the execution environment.
+
+Existing version 1 CPU checkpoints still load. All saved tensors, including
+accelerator weights and optimizer moments, are detached CPU snapshots.
+
+Files contain tensors and ordinary Python values and load with
+`torch.load(..., map_location="cpu", weights_only=True)`. Writes use a temporary
+file in the destination directory and atomic replacement; a failed write leaves
+an existing checkpoint intact. Checkpoints represent completed optimizer-step
+boundaries, including step zero. Gradients are omitted because the next training
+step clears them.
+
+The public helpers are `save_checkpoint(path, model, optimizer, *,
+completed_steps, input_ids, images=None, question_length=0,
+recurrence_depth=None, seed=None)` and `load_checkpoint(path, *, device="cpu")`.
+The loader returns a `LoadedCheckpoint` with the model, optimizer, completed
+steps, batch tensors, question length, effective recurrence depth, and seed.
+For example, after creating the file above:
+
+```python
+from multimodal_loop.train.checkpoint import load_checkpoint, save_checkpoint
+from multimodal_loop.train.trainer import train_on_batch
+
+checkpoint = load_checkpoint("checkpoints/smoke.pt")
+losses = train_on_batch(
+    checkpoint.model,
+    checkpoint.optimizer,
+    checkpoint.input_ids,
+    checkpoint.images,
+    steps=5,
+    question_length=checkpoint.question_length,
+    recurrence_depth=checkpoint.recurrence_depth,
+)
+save_checkpoint(
+    "checkpoints/continued.pt",
+    checkpoint.model,
+    checkpoint.optimizer,
+    completed_steps=checkpoint.completed_steps + len(losses),
+    input_ids=checkpoint.input_ids,
+    images=checkpoint.images,
+    question_length=checkpoint.question_length,
+    recurrence_depth=checkpoint.recurrence_depth,
+    seed=checkpoint.seed,
+)
+```
+
+The loader rebuilds the model in its saved dtype, strictly restores weights and
+optimizer state, restores train/eval mode, and restores RNG states last. Resume
+training immediately after loading to retain that random sequence.
+
+Exact continuation is tested on CPU float32/float64 in the same software,
+hardware, and execution environment. The supported baseline has all parameters
+trainable, a uniform train/eval mode, and one AdamW parameter group containing
+all model parameters in their original order. Unsupported devices, dtypes,
+optimizer layouts, and format versions raise errors. Accelerator checkpoints use
+float32 and ordinary AdamW (`foreach=False, fused=False`, with capturable and
+differentiable execution disabled). Construct the optimizer after moving the
+model to its device. Loading places AdamW moments alongside parameters and keeps
+non-capturable step counters on CPU.
+
+Resume on the same backend and hardware/software environment. CUDA indices may
+change, but CPU/CUDA/TPU cross-backend continuation is not supported. Accelerator
+checks require exact RNG replay and numerical agreement for losses, parameters,
+and optimizer moments: `rtol=1e-5, atol=1e-6` on CUDA and `rtol=1e-4, atol=1e-5`
+on TPU. These tolerances do not assert bitwise accelerator training equivalence.
+Independent random generators, data-loader state, schedulers, and mixed-precision
+state remain outside the checkpoint format.
+
+## Single-device CUDA and TPU on Kaggle
+
+Select a GPU or TPU accelerator in Kaggle's notebook settings. The training
+script accepts `--device cpu`, `cuda`, `cuda:N`, or `xla` (the first TPU device).
+It fails if the requested device is unavailable. There is no automatic CPU
+fallback, distributed launch, SPMD, mixed precision, or use of every TPU core.
+
+`train/runtime.py` provides explicit device selection, global host/device
+seeding, XLA step synchronization, and device RNG helpers. CPU and CUDA imports
+do not import `torch_xla`. Fresh runs construct their model and synthetic batch
+on CPU, transfer them, and then construct AdamW. `train_on_batch` keeps caller-owned
+placement and calls `torch_xla.sync(wait=True)` after each TPU optimizer update,
+as in the [PyTorch/XLA single-device guide](https://docs.pytorch.org/xla/master/learn/pytorch-on-xla-devices.html).
+Supervision masking retains fixed tensor shapes using ignored targets. Existing
+value validation remains enabled; host checks can synchronize XLA execution.
+This is a correctness path, not a throughput benchmark.
+
+### Install and inspect the environment
+
+Push the desired repository revision before using these cells. In a fresh Kaggle
+notebook, clone the branch containing these changes and install the package:
+
+```python
+%cd /kaggle/working
+!git clone --branch milestone0 https://github.com/Krailon/multi-modal-loop-llm.git
+%cd /kaggle/working/multi-modal-loop-llm
+%pip install -e ".[dev]"
+```
+
+Use the notebook's installed accelerator stack. Do not install this project's
+`torch` extra or `requirements.txt` over it. PyTorch/XLA must match PyTorch's
+major/minor version, and libtpu must be compatible with that pair. Kaggle's
+[TPU image configuration](https://github.com/Kaggle/docker-python/blob/main/tpu/config.txt)
+and [TPU Dockerfile](https://github.com/Kaggle/docker-python/blob/main/tpu/Dockerfile)
+currently coordinate PyTorch 2.8 with a compatible libtpu; individual notebook
+images may differ. These are environment references, not new package pins.
+The runtime reports missing or mismatched dependencies without replacing them.
+
+Inspect versions without initializing the TPU in the notebook process:
+
+```python
+from importlib.metadata import PackageNotFoundError, version
+
+for package in ("torch", "torch_xla", "libtpu"):
+    try:
+        print(package, version(package))
+    except PackageNotFoundError:
+        print(package, "not installed")
+```
+
+Run training and tests as subprocesses. For TPU sessions, avoid initializing
+JAX, TensorFlow, or XLA in the notebook process first; let each subprocess own
+and release the TPU runtime. Restart the notebook session if it already owns it.
+
+### CUDA cells
+
+This uses one GPU, including on Kaggle machines with multiple GPUs:
+
+```bash
+%%bash
+set -e
+python -c 'import torch; print(torch.__version__, torch.cuda.is_available()); print(torch.cuda.get_device_name(0))'
+python scripts/train.py --device cuda:0 --text-only --steps 2
+python scripts/train.py --device cuda:0 --steps 2 --save-checkpoint /kaggle/working/checkpoints/cuda.pt
+python scripts/train.py --device cuda:0 --resume /kaggle/working/checkpoints/cuda.pt --steps 2 --save-checkpoint /kaggle/working/checkpoints/cuda.pt
+MULTIMODAL_LOOP_TEST_DEVICE=cuda:0 python -m pytest -q tests/test_accelerators.py
+```
+
+### TPU cells
+
+Set PJRT and chip visibility before starting Python. The
+[PJRT guide](https://docs.pytorch.org/xla/master/learn/pjrt.html) documents these
+single-chip settings; the script selects one XLA device on that chip without
+spawning workers. Initial TPU graph compilation takes longer than CPU startup.
+
+```bash
+%%bash
+set -e
+export PJRT_DEVICE=TPU
+export TPU_PROCESS_BOUNDS=1,1,1
+export TPU_VISIBLE_CHIPS=0
+python -c 'from multimodal_loop.train.runtime import resolve_device, runtime_metadata; print(runtime_metadata(resolve_device("xla")))'
+python scripts/train.py --device xla --text-only --steps 2
+python scripts/train.py --device xla --steps 2 --save-checkpoint /kaggle/working/checkpoints/xla.pt
+python scripts/train.py --device xla --resume /kaggle/working/checkpoints/xla.pt --steps 2 --save-checkpoint /kaggle/working/checkpoints/xla.pt
+MULTIMODAL_LOOP_TEST_DEVICE=xla python -m pytest -q tests/test_accelerators.py
+```
+
+The hardware suite runs text-only and multimodal cases at depths 1 and 3,
+checks prefix isolation and gradients, and compares four uninterrupted updates
+with two updates followed by two resumed updates in fresh processes. Dropout is
+enabled for resume checks, including exact subsequent random draws and repeated
+save neutrality. Checkpoints are compared on CPU. An explicitly requested
+unavailable accelerator fails the suite; ordinary `pytest` skips these four
+hardware cases. `MULTIMODAL_LOOP_TEST_DEVICE=cpu` can exercise the same subprocess
+harness locally, but does not establish CUDA/TPU support.
+
+Record the selected Kaggle accelerator, printed runtime versions, and test output
+when running these checks. Single-device CUDA validation has passed in a Kaggle
+2×T4 environment, with the user-confirmed result `4 passed in 69.91s (0:01:09)`.
+This validates the single-device path on that environment; multi-GPU execution
+remains outside the supported scope. TPU support is implemented, with hardware
+validation deferred and not required for Milestone 0 sign-off.
+
+Files under `/kaggle/working/checkpoints` must be retained as notebook output
+using Kaggle's Save Version workflow before the session ends. In a later session,
+attach that output, pass its checkpoint path under `/kaggle/input/...` to
+`--resume`, and save the continued run to a new `/kaggle/working/checkpoints/...`
+path. Keep the backend and runtime environment consistent when resuming.
+
+Immediate objective — Milestone 1:
+
+> Train the model from scratch to answer basic visual questions and demonstrate meaningful visual grounding on unseen synthetic examples.
+
+Testing whether additional recurrent steps improve multi-hop reasoning follows
+in Milestone 2.
 
 Scale comes later.
 
