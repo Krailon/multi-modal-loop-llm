@@ -1,4 +1,4 @@
-"""Evaluate validation image controls using a saved synthetic training checkpoint."""
+"""Evaluate held-out image controls using a saved synthetic training checkpoint."""
 
 import argparse
 import hashlib
@@ -17,6 +17,7 @@ from multimodal_loop.train.synthetic_checkpoint import load_synthetic_checkpoint
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--checkpoint", required=True, type=Path)
+    parser.add_argument("--split", choices=("validation", "test"), default="validation")
     parser.add_argument("--device", default="cpu", help="Use the checkpoint's backend.")
     parser.add_argument("--output-dir", type=Path, default=Path("outputs/color_controls"))
     parser.add_argument("--batch-size", type=int, help="Defaults to the saved training batch size.")
@@ -39,7 +40,7 @@ def main() -> None:
         depth = saved.training_config.recurrence_depth
         results = evaluate_image_controls(
             saved.model,
-            SyntheticColorDataset(saved.manifest, "validation"),
+            SyntheticColorDataset(saved.manifest, args.split),
             recurrence_depth=depth,
             batch_size=batch_size,
             shuffle_seeds=tuple(args.shuffle_seeds),
@@ -54,7 +55,7 @@ def main() -> None:
             "model": asdict(saved.model.config),
             "training": asdict(saved.training_config),
             "evaluation": {
-                "split": "validation",
+                "split": args.split,
                 "batch_size": batch_size,
                 "recurrence_depth": depth,
                 "shuffle_seeds": args.shuffle_seeds,
@@ -68,7 +69,7 @@ def main() -> None:
             handle.write(json.dumps(report, indent=2, allow_nan=False) + "\n")
     except (OSError, TypeError, ValueError, RuntimeError) as error:
         parser.error(str(error))
-    print(f"Validation image controls: R={depth}, batch_size={batch_size}")
+    print(f"{args.split.capitalize()} image controls: R={depth}, batch_size={batch_size}")
     print(f"{'Condition':<18} {'Correct/total':>14} {'Accuracy':>10} {'Loss':>12} {'Invalid':>8}")
     rows = [("correct", results["correct"])]
     rows.extend((f"shuffled seed {row['seed']}", row["metrics"]) for row in results["shuffled"])

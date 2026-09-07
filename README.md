@@ -1107,8 +1107,10 @@ Manifest-backed dataset training, question-only validation, and deterministic
 epoch-boundary CPU resume are implemented. The fixed-depth validation baseline
 and image controls are described below. Correct images achieve 100% validation
 accuracy, versus 25.078% averaged over five shuffles and 25% with blank images.
-This supports image-dependent color answering on held-out layouts; broader visual
-reasoning and recurrence benefits remain untested.
+The frozen epoch-10 checkpoint also achieves 100% on the previously untouched test
+split, versus 24.609% averaged over the same five shuffle seeds and 25% with blank
+images. This supports image-dependent color answering on held-out layouts; broader
+visual reasoning and recurrence benefits remain untested.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1885,7 +1887,8 @@ OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/evaluate.py \
 
 The command uses the checkpoint's saved runtime recurrence depth and batch size
 (R=2 and 32 for this baseline), model weights, and corpus. It performs no training,
-selects no checkpoint, and never renders or evaluates the test split. The existing
+selects no checkpoint, and defaults to validation. Use `--split test` explicitly
+for a frozen test evaluation; only the selected split is rendered and evaluated. The existing
 same-backend checkpoint restriction applies; `--device cuda:0` evaluates a CUDA
 checkpoint on one GPU. This increment was validated on CPU.
 
@@ -1897,7 +1900,7 @@ and recurrence depth remain identical between conditions. Scene metadata is neve
 passed to the model. Blank images are all-zero tensors with the same shape and
 dtype, so image patch tokens remain present; blank does not mean `images=None`.
 
-Each shuffle permutes the entire validation split with local
+Each shuffle permutes the entire selected split with local
 `random.Random(seed).shuffle`, independently of batch size. Every donor image is
 used exactly once. Self-pairings and same-color pairings are retained, with no
 label-based filtering. Donor answers never replace recipient targets. Original
@@ -1912,7 +1915,8 @@ to specify distinct integer seeds. All examples are included, even with a partia
 last batch. Model modes, parameters, gradients, optimizer state, and random streams
 are preserved during evaluation. The CLI loads training RNG state through the
 existing checkpoint loader; it never updates the saved checkpoint or training
-metrics. There are no split or recurrence overrides in this command.
+metrics. `--split` accepts `validation` (default) or `test`; there is no recurrence
+override. Donor images always come exclusively from the selected split.
 
 The printed table includes counts, accuracy, cross-entropy, and invalid predictions
 for every condition. `controls.json` contains these metrics, every donor permutation
@@ -1953,8 +1957,54 @@ hash remained unchanged. The complete report is saved locally at
 
 These controls support image-dependent color answering on held-out layouts in
 this single-object task. They establish neither broader visual reasoning nor a
-benefit from recurrence. The test split remains unevaluated, and no shuffle seed
-or checkpoint was selected based on its result.
+benefit from recurrence. This validation comparison did not evaluate the test
+split, and no shuffle seed or checkpoint was selected based on its result.
+
+### Frozen test evaluation
+
+After completing validation controls, the existing epoch-10 checkpoint was frozen
+and evaluated once on all **256 previously untouched test examples**, without
+retraining, hyperparameter changes, or checkpoint/seed selection. The checkpoint
+SHA256 is the same as above. Its embedded manifest and settings were verified
+against the validation report before the run. Recurrence remained **R=2**, batch
+size **32**, float32 CPU with one compute thread, and shuffle seeds **0–4**.
+Each shuffle used only test images as donors; original test answers were retained.
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/evaluate.py \
+  --checkpoint outputs/color_baseline/last.pt \
+  --split test --batch-size 32 --shuffle-seeds 0 1 2 3 4 \
+  --device cpu --output-dir outputs/color_test_controls
+```
+
+| Image condition | Correct/total | Test accuracy | Test cross-entropy |
+| --- | --- | --- | --- |
+| Correct | 256/256 | 100.0000% | 0.003840 |
+| Shuffled, seed 0 | 73/256 | 28.5156% | 5.348914 |
+| Shuffled, seed 1 | 61/256 | 23.8281% | 5.656441 |
+| Shuffled, seed 2 | 60/256 | 23.4375% | 5.737998 |
+| Shuffled, seed 3 | 61/256 | 23.8281% | 5.702248 |
+| Shuffled, seed 4 | 60/256 | 23.4375% | 5.718033 |
+| Blank | 64/256 | 25.0000% | 4.397621 |
+
+Shuffled mean test accuracy was **24.6094%** (range **23.4375–28.5156%**),
+with mean cross-entropy **5.632727** (range **5.348914–5.737998**).
+Correct-image accuracy exceeded the shuffled mean by **75.3906 percentage points**
+and blank-image accuracy by **75 percentage points**. All conditions produced zero
+non-color predictions. Every shuffle's accuracy equaled its same-color pairing
+fraction. Validation and test therefore both show 100% correct-image accuracy,
+with shuffled and blank controls near the 25% balanced-color baseline.
+
+The full report, including donor permutations, pairing fractions, hashes, and
+settings, is saved locally at `outputs/color_test_controls/controls.json`
+(an ignored generated artifact). The checkpoint, all original training artifacts,
+and the validation report were verified byte-for-byte unchanged after evaluation.
+All five predetermined shuffles are reported; no settings were changed in response
+to these results. The test split has now been evaluated and is no longer untouched.
+
+This frozen test result supports image-dependent single-object color answering on
+held-out layouts. It does not establish broader visual reasoning or a recurrence
+benefit, and does not by itself close Milestone 1.
 
 Immediate objective — Milestone 1:
 

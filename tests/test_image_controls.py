@@ -33,7 +33,10 @@ from multimodal_loop.train.synthetic import (
     synthetic_loader,
     train_synthetic_epoch,
 )
-from multimodal_loop.train.synthetic_checkpoint import save_synthetic_checkpoint
+from multimodal_loop.train.synthetic_checkpoint import (
+    load_synthetic_checkpoint,
+    save_synthetic_checkpoint,
+)
 
 
 def assert_equal(left, right):
@@ -334,7 +337,8 @@ def test_cli_embedded_manifest_report_and_preserved_files(manifest, config, tmp_
         ("--batch-size", "0"),
         ("--shuffle-seeds", "1", "1"),
         ("--shuffle-seeds",),
-        ("--split", "test"),
+        ("--split", "train"),
+        ("--split", "unknown"),
         ("--recurrence-depth", "1"),
     ],
 )
@@ -343,3 +347,38 @@ def test_cli_rejects_invalid_or_unsupported_settings(tmp_path, arguments):
     result = cli("--checkpoint", tmp_path / "missing.pt", "--output-dir", output, *arguments)
     assert result.returncode != 0
     assert not output.exists()
+
+
+def test_cli_test_split_uses_only_test_donors_and_preserves_validation(manifest, config, tmp_path):
+    path = tmp_path / "last.pt"
+    make_checkpoint(path, manifest, config)
+    checkpoint_bytes = path.read_bytes()
+    validation_dir = tmp_path / "validation"
+    validation_run = cli("--checkpoint", path, "--output-dir", validation_dir)
+    assert validation_run.returncode == 0, validation_run.stderr
+    validation_path = validation_dir / "controls.json"
+    validation_bytes = validation_path.read_bytes()
+    output = tmp_path / "test"
+    result = cli("--checkpoint", path, "--split", "test", "--output-dir", output)
+    assert result.returncode == 0, result.stderr
+    assert "Test image controls: R=3, batch_size=3" in result.stdout
+    report = json.loads((output / "controls.json").read_text())
+    assert report["evaluation"]["split"] == "test"
+    saved = load_synthetic_checkpoint(path)
+    expected = evaluate_image_controls(
+        saved.model,
+        SyntheticColorDataset(saved.manifest, "test"),
+        recurrence_depth=3,
+        batch_size=3,
+    )
+    assert_equal(report["results"], expected)
+    assert report["results"]["correct"]["total"] == manifest.config.test_size == 4
+    assert report["results"]["blank"]["total"] == 4
+    for row in report["results"]["shuffled"]:
+        assert row["metrics"]["total"] == 4
+        assert sorted(row["permutation"]) == list(range(4))
+        answers = [scene.color for scene in manifest.splits["test"]]
+        fraction = sum(answers[i] == answers[j] for i, j in enumerate(row["permutation"])) / 4
+        assert row["same_color_pairing_fraction"] == fraction
+    assert path.read_bytes() == checkpoint_bytes
+    assert validation_path.read_bytes() == validation_bytes
