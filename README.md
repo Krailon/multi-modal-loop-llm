@@ -960,6 +960,9 @@ deferred and does not block milestone completion.
 
 ## Milestone 1 — Synthetic vision
 
+**Complete:** single-object color grounding on held-out layouts.
+[Results and close-out review](docs/milestones/milestone1.md).
+
 Train a small model from random initialization to answer basic visual questions.
 
 Success criterion:
@@ -1095,22 +1098,13 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 1 — Synthetic vision, in progress: learn meaningful visual
-grounding from random initialization without a pretrained vision encoder.
+**Phase:** Milestone 2 preparation — multi-object synthetic scenes and relational
+questions, followed by controlled recurrence experiments.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
-The first Milestone 1 data increment implements deterministic single-object color
-questions, disjoint layout splits, and a manifest/visual preview. A fixed tokenizer
-and collator now connect examples to model inputs and answer-only supervision.
-Manifest-backed dataset training, question-only validation, and deterministic
-epoch-boundary CPU resume are implemented. The fixed-depth validation baseline
-and image controls are described below. Correct images achieve 100% validation
-accuracy, versus 25.078% averaged over five shuffles and 25% with blank images.
-The frozen epoch-10 checkpoint also achieves 100% on the previously untouched test
-split, versus 24.609% averaged over the same five shuffle seeds and 25% with blank
-images. This supports image-dependent color answering on held-out layouts; broader
-visual reasoning and recurrence benefits remain untested.
+**Milestone 1:** Complete for single-object color grounding on held-out layouts.
+See [results, evidence, and close-out review](docs/milestones/milestone1.md).
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1307,7 +1301,7 @@ patches, three question tokens, and five answer tokens per item. Text-only mode
 defaults to causal language modeling. Each run prints its mode, seed, device,
 question length, recurrence depth, and each step's loss before the update.
 Loss reduction here measures fitting a fixed batch; visual reasoning experiments
-remain part of Milestone 1.
+are documented separately in the [Milestone 1 results](docs/milestones/milestone1.md).
 
 | Settings | Defaults |
 | --- | --- |
@@ -1850,29 +1844,8 @@ single-device TPU path, whose hardware validation remains deferred. The new data
 training/resume path is CPU-tested; the earlier Kaggle sign-off covers the
 Milestone 0 accelerator infrastructure.
 
-### First CPU validation baseline
-
-The predetermined ten-epoch run completed with the defaults above: corpus seed 0,
-training seed 0, R=2, batch size 32, and 320 AdamW updates. It used Python 3.12.3,
-PyTorch 2.14.0+cpu, float32, and one CPU compute thread (`OMP_NUM_THREADS=1`,
-`MKL_NUM_THREADS=1`). The exact manifest SHA256 is
-`4b15b07dd6728ae3a3f37ca4fe900288e184ed2ae6ba2261ea515ffb357261a2`.
-
-| Epoch | Updates | Training loss | Validation loss | Validation accuracy |
-| --- | --- | --- | --- | --- |
-| 0 | 0 | — | 2.540769 | 64/256 (25.00%) |
-| 1 | 32 | 1.559847 | 1.351554 | 136/256 (53.12%) |
-| 2 | 64 | 0.739264 | 0.127205 | 255/256 (99.61%) |
-| 3 | 96 | 0.057924 | 0.026079 | 256/256 (100%) |
-| 10 | 320 | 0.004216 | 0.003961 | 256/256 (100%) |
-
-Accuracy stayed at 100% from epochs 3 through 10; the final evaluation had zero
-non-color predictions. All epoch metrics and the final checkpoint are saved
-locally under `outputs/color_baseline/` (ignored generated artifacts). The run
-used the full planned budget without tuning or selecting a best checkpoint.
-The test split was not evaluated. This establishes that the training path can
-learn the held-out color task. The image controls below test whether those
-answers depend on the image. No recurrence benefit is claimed.
+Baseline history and experimental results are recorded in
+[Milestone 1 — results and close-out](docs/milestones/milestone1.md).
 
 ## Image controls on the same trained model
 
@@ -1928,90 +1901,12 @@ An existing report is rejected; choose a new output directory for another run.
 The five shuffle results describe pairing variation on one validation set, not five
 independent datasets or independent training runs.
 
-### Baseline control results
+Validation and frozen-test results, full protocols, and limitations are recorded in
+[Milestone 1 — results and close-out](docs/milestones/milestone1.md).
 
-The existing epoch-10 checkpoint was evaluated without retraining on all 256
-validation examples, using R=2, batch size 32, float32 CPU, and one compute thread
-in the baseline environment above. Its SHA256 is
-`08fa29639f7566829c0c4e5172b7945b95462c81c4f6fd483fcf55ad6c0b0047`.
+Immediate objective — Milestone 2 preparation:
 
-| Image condition | Correct/total | Accuracy | Cross-entropy |
-| --- | --- | --- | --- |
-| Correct | 256/256 | 100.0000% | 0.003961 |
-| Shuffled, seed 0 | 63/256 | 24.6094% | 5.599248 |
-| Shuffled, seed 1 | 56/256 | 21.8750% | 5.829057 |
-| Shuffled, seed 2 | 77/256 | 30.0781% | 5.167806 |
-| Shuffled, seed 3 | 55/256 | 21.4844% | 5.828571 |
-| Shuffled, seed 4 | 70/256 | 27.3438% | 5.385539 |
-| Blank | 64/256 | 25.0000% | 4.397621 |
-
-Shuffled mean accuracy was **25.0781%**, with range **21.4844–30.0781%**;
-mean cross-entropy was **5.562044**, with range **5.167806–5.829057**.
-Correct-image accuracy exceeded the shuffled mean by **74.9219 percentage points**
-and blank-image accuracy by **75 percentage points**. All conditions produced zero
-non-color predictions. Each shuffle's accuracy equaled its realized same-color
-pairing fraction, consistent with the model following the donor image's color.
-Correct-image metrics exactly reproduced the saved baseline, and the checkpoint
-hash remained unchanged. The complete report is saved locally at
-`outputs/color_controls/controls.json` (an ignored generated artifact).
-
-These controls support image-dependent color answering on held-out layouts in
-this single-object task. They establish neither broader visual reasoning nor a
-benefit from recurrence. This validation comparison did not evaluate the test
-split, and no shuffle seed or checkpoint was selected based on its result.
-
-### Frozen test evaluation
-
-After completing validation controls, the existing epoch-10 checkpoint was frozen
-and evaluated once on all **256 previously untouched test examples**, without
-retraining, hyperparameter changes, or checkpoint/seed selection. The checkpoint
-SHA256 is the same as above. Its embedded manifest and settings were verified
-against the validation report before the run. Recurrence remained **R=2**, batch
-size **32**, float32 CPU with one compute thread, and shuffle seeds **0–4**.
-Each shuffle used only test images as donors; original test answers were retained.
-
-```bash
-OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/evaluate.py \
-  --checkpoint outputs/color_baseline/last.pt \
-  --split test --batch-size 32 --shuffle-seeds 0 1 2 3 4 \
-  --device cpu --output-dir outputs/color_test_controls
-```
-
-| Image condition | Correct/total | Test accuracy | Test cross-entropy |
-| --- | --- | --- | --- |
-| Correct | 256/256 | 100.0000% | 0.003840 |
-| Shuffled, seed 0 | 73/256 | 28.5156% | 5.348914 |
-| Shuffled, seed 1 | 61/256 | 23.8281% | 5.656441 |
-| Shuffled, seed 2 | 60/256 | 23.4375% | 5.737998 |
-| Shuffled, seed 3 | 61/256 | 23.8281% | 5.702248 |
-| Shuffled, seed 4 | 60/256 | 23.4375% | 5.718033 |
-| Blank | 64/256 | 25.0000% | 4.397621 |
-
-Shuffled mean test accuracy was **24.6094%** (range **23.4375–28.5156%**),
-with mean cross-entropy **5.632727** (range **5.348914–5.737998**).
-Correct-image accuracy exceeded the shuffled mean by **75.3906 percentage points**
-and blank-image accuracy by **75 percentage points**. All conditions produced zero
-non-color predictions. Every shuffle's accuracy equaled its same-color pairing
-fraction. Validation and test therefore both show 100% correct-image accuracy,
-with shuffled and blank controls near the 25% balanced-color baseline.
-
-The full report, including donor permutations, pairing fractions, hashes, and
-settings, is saved locally at `outputs/color_test_controls/controls.json`
-(an ignored generated artifact). The checkpoint, all original training artifacts,
-and the validation report were verified byte-for-byte unchanged after evaluation.
-All five predetermined shuffles are reported; no settings were changed in response
-to these results. The test split has now been evaluated and is no longer untouched.
-
-This frozen test result supports image-dependent single-object color answering on
-held-out layouts. It does not establish broader visual reasoning or a recurrence
-benefit, and does not by itself close Milestone 1.
-
-Immediate objective — Milestone 1:
-
-> Train the model from scratch to answer basic visual questions and demonstrate meaningful visual grounding on unseen synthetic examples.
-
-Testing whether additional recurrent steps improve multi-hop reasoning follows
-in Milestone 2.
+> Establish deterministic multi-object scenes and relational questions before testing whether additional recurrent steps improve reasoning.
 
 Scale comes later.
 

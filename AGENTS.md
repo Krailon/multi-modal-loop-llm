@@ -6,7 +6,8 @@ This repository implements an experimental **multimodal recurrent-depth transfor
 
 Read `README.md` before making architectural changes. It describes the research goals, hypotheses, milestones, and intended repository structure.
 
-The current priority is **Milestone 1: synthetic vision and visual grounding**.
+The current priority is **Milestone 2 preparation: multi-object synthetic scenes
+and relational questions, followed by controlled recurrence experiments**.
 
 Do not prematurely optimize for large-scale training.
 
@@ -325,10 +326,15 @@ Do not duplicate large sections of `README.md` inside this file.
 Milestone 0 is complete, including CPU correctness and Kaggle single-device CUDA
 validation. TPU hardware validation is deferred.
 
-Milestone 1 begins with deterministic single-object color questions, independently
-tested rendering and labels, and disjoint training/validation/test layouts.
-Scene metadata is for supervision and inspection, never model input. Establish
-held-out visual grounding before investigating recurrence benefits in Milestone 2.
+Milestone 1 is complete for single-object color grounding on held-out layouts.
+See [the results and close-out review](docs/milestones/milestone1.md). Preserve its
+corpus, frozen checkpoint, and validation/test reports as reference evidence.
+The test split has been evaluated; do not describe it as untouched.
+
+Milestone 2 preparation starts with deterministic multi-object scenes and
+relational labels. Establish data correctness before testing recurrence benefits.
+Scene metadata remains supervision/inspection information, never model input.
+Do not infer a recurrence advantage from the Milestone 1 fixed-depth result.
 
 Preserve the infrastructure baseline:
 
