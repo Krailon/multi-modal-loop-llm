@@ -1953,6 +1953,57 @@ independent datasets or independent training runs.
 Validation and frozen-test results, full protocols, and limitations are recorded in
 [Milestone 1 — results and close-out](docs/milestones/milestone1.md).
 
+## Three-object rows and relational color answers
+
+The first Milestone 2 data increment supports handcrafted horizontal rows of
+exactly three objects. `MultiObjectScene` contains an immutable tuple of existing
+`ShapeScene` objects and an `image_size` (default 32). Bounding-box vertical centers
+must align, adjacent boxes must have at least one blank pixel between them, and
+all boxes must retain a one-pixel canvas margin. Existing even-size and shape/color
+validation applies. Tuple order is arbitrary; spatial order comes from coordinates.
+Repeated shapes and colors are allowed in a scene.
+
+`RelationalColorQuestion(anchor_shape, direction)` accepts a shape and `left` or
+`right`. Its `.text` asks for the color of the object immediately beside that
+anchor. The anchor must occur exactly once, and the requested neighbor must exist;
+otherwise resolution raises `ValueError`. With two objects on the requested side,
+the immediate neighbor in horizontal order supplies the answer.
+
+```python
+from multimodal_loop.data.relational_shapes import (
+    MultiObjectScene,
+    RelationalColorQuestion,
+    make_relational_example,
+)
+from multimodal_loop.data.synthetic_shapes import ShapeScene
+
+scene = MultiObjectScene(
+    objects=(
+        ShapeScene("circle", "green", left=1, top=12, size=8),
+        ShapeScene("square", "red", left=12, top=12, size=8),
+        ShapeScene("triangle", "blue", left=23, top=12, size=8),
+    )
+)
+left = make_relational_example(scene, RelationalColorQuestion("square", "left"))
+right = make_relational_example(scene, RelationalColorQuestion("square", "right"))
+assert left.answer == "green" and right.answer == "blue"
+assert left.image.equal(right.image)  # Same pixels, different questions and answers.
+print(left.question)  # What color is the object immediately left of the square?
+```
+
+`render_multi_object_scene` combines the existing renderer's disjoint objects into
+fresh CPU float32 `[3,H,W]` pixels, independently of default tensor device/dtype,
+without consuming global randomness. `resolve_relation` returns the target object;
+`answer_relational_question` returns its color without rendering. The frozen
+`RelationalExample` holds pixels, question text, answer, scene, and query metadata;
+its tensor remains mutable and independently allocated for each example. Scene
+and query metadata are supervision/inspection information, never model inputs.
+
+This increment establishes geometry and answer semantics only. It does not yet
+provide corpus generation, balancing, splits, relational tokenization, batching,
+or training. The Milestone 1 tokenizer/collator still supports only its original
+fixed question. Existing formats and recorded experiments remain unchanged.
+
 Immediate objective — Milestone 2 preparation:
 
 > Establish deterministic multi-object scenes and varied one-hop relational questions,
