@@ -1999,10 +1999,84 @@ without consuming global randomness. `resolve_relation` returns the target objec
 its tensor remains mutable and independently allocated for each example. Scene
 and query metadata are supervision/inspection information, never model inputs.
 
-This increment establishes geometry and answer semantics only. It does not yet
-provide corpus generation, balancing, splits, relational tokenization, batching,
-or training. The Milestone 1 tokenizer/collator still supports only its original
-fixed question. Existing formats and recorded experiments remain unchanged.
+These helpers establish geometry and answer semantics. The corpus generator below
+adds balancing and split separation. Relational tokenization, batching, and training
+remain future increments; the Milestone 1 tokenizer/collator still supports only
+its original fixed question. Existing formats and recorded experiments remain unchanged.
+
+## Balanced relational corpus generation
+
+`RelationalCorpusConfig` and `build_relational_splits(config)` in
+`multimodal_loop.data.relational_corpus` generate metadata for a finite corpus.
+Defaults are 32×32 images, object sizes `(6, 8)`, seed 0, and geometry counts
+**16 training / 4 validation / 4 test**. Counts refer to geometries, not images or
+question-answer examples. Every generated image contains one square, one circle,
+and one triangle with three distinct colors selected from red, green, blue, yellow.
+
+A geometry is the spatially ordered tuple of three `(left, top, size)` bounding
+boxes, excluding shapes and colors. The generator enumerates feasible size triples
+in configured order, followed by ascending vertical centers, left margins, first
+internal gaps, and second internal gaps. The right margin is the remaining space.
+All margins and internal gaps are at least one pixel. Size triples that cannot fit
+are skipped. The default finite catalog contains **25,136 geometries**; `.capacity`
+counts these without constructing the catalog. Invalid settings or requested
+geometry totals exceeding capacity fail before records are expanded or files written.
+
+A local `random.Random(seed)` shuffles the catalog, then geometries are allocated
+without replacement to train, validation, and test. **Every shape/color variant
+and every question for a geometry remains in the same split.** Evaluation therefore
+holds out bounding-box arrangements rather than only recolorings or shape orders.
+Changing corpus settings can change membership; preserve the generated manifest
+for an experiment instead of regenerating with modified settings.
+
+Each geometry expands into all six shape orders and all 24 ordered assignments of
+three distinct colors: **144 images**. Every image has four valid questions, ordered
+by spatial anchor position and then left/right direction, skipping missing neighbors.
+These target the middle, left, right, and middle objects respectively. Each image
+record retains all four queries, exact question texts, and explicit answers together.
+Objects are stored in canonical left-to-right order; no raster arrays are stored.
+Image records are shuffled within each split with local
+`random.Random(f"{seed}:{split}")`. Generation consumes no global RNG state.
+
+| Split | Geometries | Images | Question-answer examples | Examples per answer color |
+| --- | ---: | ---: | ---: | ---: |
+| Training | 16 | 2,304 | 9,216 | 2,304 |
+| Validation | 4 | 576 | 2,304 | 576 |
+| Test | 4 | 576 | 2,304 | 576 |
+
+Answers are exactly balanced both overall and conditional on each of the six
+question texts, even within one geometry's expansion. Distinct colors ensure
+that questions targeting different objects have different answers. However, two
+of the four questions target the middle object: **an image-only strategy always
+answering with the middle object's color scores 50%**, not 25%. Later learning
+experiments must test question dependence against this possibility. These are
+dataset properties, not learned-model results.
+
+```bash
+python scripts/generate_relational_data.py --output-dir outputs/relational_shapes
+```
+
+The command prints geometry, image, question-answer, and answer-frequency counts.
+It writes a distinct `relational_color_rows` version-1 `manifest.json` with config,
+software versions, and ordered split records. Each record contains `scene` and
+`questions`; each question contains structured `query`, exact `question` text,
+and `answer`. The API returns tuples of frozen `RelationalSceneRecord` and
+`RelationalQA` records. Scene/query metadata is supervision and inspection data,
+never model input. This format does not change or replace the Milestone 1 manifest.
+
+`preview.html` is self-contained and displays actual raster pixels with all four
+questions/answers for up to 12 images per split. The relational and original
+single-object generators share the same raster-to-SVG helper. Use `--preview-count`
+to change the number of preview images. Reruns replace the manifest and preview
+in the chosen directory; generated files under `outputs/` are ignored by git.
+Previewing test scenes is data inspection, not model evaluation.
+
+Use `--image-size`, `--object-sizes`, `--seed`, `--train-geometry-count`,
+`--validation-geometry-count`, and `--test-geometry-count` to configure another
+valid corpus. All three geometry counts must be positive integers. Object sizes
+must be distinct even integers of at least four, fitting the canvas individually;
+the total request must fit the feasible three-object catalog. No corpus loader,
+relational tokenizer, batching path, or model training is introduced by this command.
 
 Immediate objective — Milestone 2 preparation:
 
