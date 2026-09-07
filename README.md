@@ -2,7 +2,16 @@
 
 An experimental multimodal foundation-model architecture built around **recurrent depth**.
 
-The central goal of this project is to investigate whether a transformer can learn to perform useful iterative computation over a **shared multimodal latent state**, and whether increasing recurrent depth at inference time can improve multimodal reasoning without increasing the number of model parameters.
+The primary goal is to progressively build and train a **usable multimodal model**
+that supports increasingly complex long-term awareness experiments. Progress will
+be measured through concrete language, perception, reasoning, and eventually
+memory capabilities. Broad general capability is an ambition, not a promised
+level of intelligence.
+
+The initial research question is whether iterative computation over a **shared
+multimodal latent state** offers practical advantages, disadvantages, or tradeoffs
+compared with alternatives. A recurrence advantage is not required for the model
+to be useful or for capability development to continue.
 
 Rather than attaching a pretrained vision encoder to a pretrained language model, this project initially trains the entire system **from random initialization**.
 
@@ -10,7 +19,18 @@ Images and text are converted into tokens and processed by the same recurrent tr
 
 ---
 
-## Research Goal
+## Functional Goal and Initial Research Direction
+
+Functional progress and architectural findings are assessed separately. Build
+reliable capabilities and a controllable experimental platform, while testing
+which architectural choices help those capabilities under matched conditions.
+Positive, negative, and neutral recurrence findings are all informative.
+
+The current recurrence repeats computation **within one forward pass**. It does
+not yet maintain persistent memory across interactions. Long-term awareness
+experiments will require separately designed and evaluated capabilities such as
+memory, temporal continuity, and adaptation; recurrent depth alone does not
+establish those capabilities.
 
 Modern multimodal language models usually follow a structure similar to:
 
@@ -83,9 +103,13 @@ These stages are not explicitly programmed into the model. They are behaviors we
 
 ---
 
-# Primary Research Questions
+# Research Questions
 
-The initial project is designed around several questions.
+The initial architectural question is whether shared multimodal recurrence is
+useful in practice, including its costs and failure modes. The questions below
+are starting hypotheses and investigation directions, not a checklist of positive
+results required for project success. Additional questions can be introduced as
+the functional model and experimental needs develop.
 
 ### 1. Can multimodal representations emerge from random initialization?
 
@@ -105,7 +129,7 @@ We want to determine whether useful visual representations can emerge purely thr
 
 ### 2. Does recurrent depth improve multimodal reasoning?
 
-The primary hypothesis is:
+One hypothesis to test is:
 
 $$
 \text{performance}(R + 1) > \text{performance}(R)
@@ -113,13 +137,16 @@ $$
 
 for tasks requiring additional reasoning.
 
-A successful model should ideally require little recurrent computation for easy tasks and benefit from additional computation for harder ones.
+An interesting outcome would be little recurrent computation for easy tasks and
+benefits from additional computation for harder ones. No improvement or degradation
+would also be valid findings; neither prevents pursuing functional capabilities.
 
 ---
 
 ### 3. Does useful inference-time depth generalization occur?
 
-The model will be trained with randomized recurrent depth.
+A future depth-generalization experiment can train with randomized recurrent depth.
+The current capability baseline trains at a fixed depth.
 
 At evaluation time, it will be tested with recurrence depths both inside and outside the training distribution.
 
@@ -189,7 +216,8 @@ The initial architecture intentionally avoids:
 
 These may be explored later.
 
-The first objective is to isolate **multimodal recurrent computation**.
+The first objective is a functional, understandable multimodal baseline with
+which to investigate **multimodal recurrent computation**.
 
 ---
 
@@ -238,7 +266,9 @@ validation of scaling behavior
 only if earlier experiments justify it
 ```
 
-Large-scale training should not begin until the recurrent mechanism demonstrates measurable value at small scale.
+Large-scale training should wait for reliable small-scale capabilities, understood
+training behavior, and an explicit resource budget. A measured recurrence advantage
+is not a prerequisite for continued capability development.
 
 ---
 
@@ -943,6 +973,11 @@ Smaller 20–50M parameter configurations should be used during debugging.
 
 # Milestones
 
+The roadmap combines capability development and research investigations. Later
+research milestones can produce positive, negative, or neutral findings, and their
+ordering can evolve with capability needs. They do not require an architectural
+advantage before work on a useful model can continue.
+
 ## Milestone 0 — Infrastructure
 
 **Status: Complete.** CPU correctness and deterministic resume are verified,
@@ -971,15 +1006,26 @@ Success criterion:
 
 ---
 
-## Milestone 2 — Multimodal recurrence
+## Milestone 2 — Question-dependent visual reasoning
 
-Introduce multi-hop synthetic questions.
+Build on single-object color grounding with varied questions about multi-object
+scenes. Start with deterministic scenes, unambiguous one-hop relational questions,
+and independently verified labels, then establish learning at a fixed recurrence
+depth on held-out examples.
 
 Success criterion:
 
-> Additional recurrent steps improve performance on tasks requiring additional reasoning.
+> The model answers varied questions about multi-object scenes on held-out examples,
+> with controls demonstrating that both the image and the question affect its
+> answers appropriately.
 
-This is the project's first major scientific milestone.
+Use image controls and same-image/different-question examples that require
+different answers. This tests question dependence as well as image dependence.
+Detailed dataset design and numerical acceptance thresholds belong to the next
+small implementation-planning increment.
+
+Recurrence comparisons can follow as research. Demonstrating an advantage from
+additional recurrent steps is not required to complete this capability milestone.
 
 ---
 
@@ -989,7 +1035,8 @@ Train using a restricted distribution of recurrent depths and evaluate beyond it
 
 Success criterion:
 
-> Inference-time recurrence greater than typical training recurrence produces useful computation rather than immediate degradation.
+> Characterize accuracy, stability, and computational cost beyond the training
+> depth distribution, including improvements, neutral effects, and degradation.
 
 ---
 
@@ -1015,7 +1062,8 @@ Success criterion:
 
 ## Milestone 6 — New training algorithms
 
-Once the baseline is well understood, begin replacing the training machinery.
+Once the baseline is well understood, evaluate changes to the training machinery
+when a concrete capability need or research question motivates them.
 
 Potential research areas include:
 
@@ -1039,44 +1087,45 @@ Only after the architecture has survived controlled experimentation should it be
 
 # What Would Count as Success?
 
-The project does **not** initially need to outperform state-of-the-art multimodal models.
+Functional success means a progressively more usable model and experimental
+platform: reliable visual grounding, question-dependent reasoning, broader
+language capability, and eventually explicitly tested memory and behavior across
+extended interactions. Define each increment through observable tasks, held-out
+evaluation, and controls. The project does not initially need to outperform
+state-of-the-art models or meet an undefined threshold of “average intelligence.”
 
-The first architecture would be considered scientifically successful if:
+Research success means credible answers to well-specified questions. Tests of
+recurrence should establish where it helps, has no meaningful effect, or hurts,
+with attention to parameter count, computational cost, stability, and generalization.
+A useful model remains a success even if recurrence offers no measured advantage.
 
-1. Visual grounding emerges from random initialization.
-2. The same recurrent core handles text and visual representations.
-3. Increasing recurrence improves some multimodal reasoning tasks.
-4. Harder tasks benefit from greater recurrent depth than easier tasks.
-5. Useful computation occurs beyond commonly seen training depths.
-6. Recurrent states remain stable over substantial unrolling.
-7. The recurrent model behaves measurably differently from a matched dense model.
-
-If these properties appear consistently, scaling becomes justified.
+Scaling decisions should follow demonstrated capabilities, training reliability,
+and available resources. No particular recurrence hypothesis must be confirmed
+before continuing model development.
 
 ---
 
 # Long-Term Direction
 
-The long-term goal is not merely to build:
+The long-term functional goal is a capable multimodal model for increasingly
+complex long-term awareness experiments. Potential future research questions
+include:
 
-```text
-vision encoder + looped LLM
-```
+* How should a model retain, retrieve, update, and forget information across interactions?
+* How can temporal continuity and adaptation be evaluated without confusing them
+  with retrieval or memorization of a fixed dataset?
+* How should computation be allocated across modalities, tokens, or recurrent steps?
+* Which architectural and training choices improve useful behavior, reliability,
+  or efficiency under controlled comparisons?
 
-but to investigate a model in which **multimodal cognition itself is recurrent**.
+This list is open-ended. Questions and priorities can evolve as the model becomes
+more capable; these are possibilities, not implemented features or committed designs.
+Persistent memory and cross-interaction behavior will need explicit mechanisms
+and tests beyond the current recurrent-depth computation.
 
-Potential future architectures could allow computation to be allocated dynamically:
-
-```text
-Visual token A   ███████████████  7 steps
-Visual token B   █████████        5 steps
-Text token A     █████            3 steps
-Text token B     █████████████    6 steps
-```
-
-Different modalities, tokens, or latent states could receive different amounts of computation depending on task difficulty.
-
-Ultimately, the project asks whether a multimodal foundation model can learn not only **what representations to construct**, but also **how long to think about them**.
+Shared multimodal recurrence remains the initial architectural investigation.
+Future experiments may explore dynamic computation allocation or other designs,
+while retaining simple baselines and changing one major variable at a time.
 
 ---
 
@@ -1098,8 +1147,8 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 2 preparation — multi-object synthetic scenes and relational
-questions, followed by controlled recurrence experiments.
+**Phase:** Milestone 2 preparation — question-dependent visual reasoning through
+multi-object scenes and varied relational questions, first at fixed recurrence depth.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
@@ -1906,10 +1955,13 @@ Validation and frozen-test results, full protocols, and limitations are recorded
 
 Immediate objective — Milestone 2 preparation:
 
-> Establish deterministic multi-object scenes and relational questions before testing whether additional recurrent steps improve reasoning.
+> Establish deterministic multi-object scenes and varied one-hop relational questions,
+> then verify held-out learning at fixed recurrence depth with controls for image
+> and question dependence.
 
 Scale comes later.
 
-First, prove the loop matters.
+First, build and measure useful capabilities. Investigate where recurrence helps
+alongside that progress.
 # multi-modal-loop-llm
 Multi-Modal Loop LLM experiment
