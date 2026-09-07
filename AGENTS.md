@@ -6,7 +6,13 @@ This repository implements an experimental **multimodal recurrent-depth transfor
 
 Read `README.md` before making architectural changes. It describes the research goals, hypotheses, milestones, and intended repository structure.
 
-The current priority is **Milestone 0: infrastructure and correctness**.
+The primary functional goal is a usable multimodal model for increasingly complex
+long-term awareness experiments. Measure progress through concrete capabilities;
+do not promise a general level of intelligence.
+
+The current priority is **Milestone 2: question-dependent visual reasoning**,
+starting with multi-object scenes and varied one-hop relational questions at
+fixed recurrence depth.
 
 Do not prematurely optimize for large-scale training.
 
@@ -14,7 +20,17 @@ Do not prematurely optimize for large-scale training.
 
 ## Core Research Principle
 
-The project is investigating whether multimodal computation can occur inside a shared recurrent transformer state.
+The initial research question is whether computation in a shared recurrent
+multimodal state offers practical advantages, disadvantages, or tradeoffs.
+Evaluate that question separately from functional capability progress. A positive
+recurrence result is not a prerequisite for continuing development or completing
+Milestone 2. Negative and neutral findings should be reported faithfully.
+
+Leave room for additional research questions as capabilities and experimental
+needs develop. Persistent memory, temporal continuity, adaptation, and computation
+allocation are possible directions, not requirements for the current increment.
+The current core repeats computation within a forward pass; it does not implement
+persistent memory across interactions. Design and test such capabilities separately.
 
 The initial architecture should remain deliberately simple.
 
@@ -287,7 +303,7 @@ Masking behavior must be covered by unit tests.
 
 ## Training
 
-Milestone 0 prioritizes correctness over speed.
+Early synthetic-vision training prioritizes correctness over speed.
 
 Initially prefer:
 
@@ -322,7 +338,28 @@ Do not duplicate large sections of `README.md` inside this file.
 
 ## Current Milestone
 
-Milestone 0 is complete only when:
+Milestone 0 is complete, including CPU correctness and Kaggle single-device CUDA
+validation. TPU hardware validation is deferred.
+
+Milestone 1 is complete for single-object color grounding on held-out layouts.
+See [the results and close-out review](docs/milestones/milestone1.md). Preserve its
+corpus, frozen checkpoint, and validation/test reports as reference evidence.
+The test split has been evaluated; do not describe it as untouched.
+
+Milestone 2 targets question-dependent visual reasoning. Start with deterministic
+multi-object scenes, unambiguous one-hop relational questions, and independently
+verified labels. Establish held-out learning at a fixed recurrence depth, with
+image controls and same-image/different-question examples requiring different
+answers. Both the image and question must affect answers appropriately.
+
+Specify dataset details and numerical acceptance criteria in the next small
+planning increment. Recurrence comparisons may follow, but an advantage is not
+a milestone completion gate. Later research priorities can evolve with capability
+needs; preserve simple baselines and explicit computational budgets.
+Scene metadata remains supervision/inspection information, never model input.
+Do not infer a recurrence advantage from the Milestone 1 fixed-depth result.
+
+Preserve the infrastructure baseline:
 
 * the package installs successfully
 * imports work
@@ -334,5 +371,5 @@ Milestone 0 is complete only when:
 * checkpoints save and load
 * tests pass reliably
 
-Prefer completing these foundations before beginning synthetic reasoning experiments.
+Keep new research increments small and preserve these foundations as the data and training paths grow.
 

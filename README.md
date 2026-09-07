@@ -2,7 +2,16 @@
 
 An experimental multimodal foundation-model architecture built around **recurrent depth**.
 
-The central goal of this project is to investigate whether a transformer can learn to perform useful iterative computation over a **shared multimodal latent state**, and whether increasing recurrent depth at inference time can improve multimodal reasoning without increasing the number of model parameters.
+The primary goal is to progressively build and train a **usable multimodal model**
+that supports increasingly complex long-term awareness experiments. Progress will
+be measured through concrete language, perception, reasoning, and eventually
+memory capabilities. Broad general capability is an ambition, not a promised
+level of intelligence.
+
+The initial research question is whether iterative computation over a **shared
+multimodal latent state** offers practical advantages, disadvantages, or tradeoffs
+compared with alternatives. A recurrence advantage is not required for the model
+to be useful or for capability development to continue.
 
 Rather than attaching a pretrained vision encoder to a pretrained language model, this project initially trains the entire system **from random initialization**.
 
@@ -10,7 +19,18 @@ Images and text are converted into tokens and processed by the same recurrent tr
 
 ---
 
-## Research Goal
+## Functional Goal and Initial Research Direction
+
+Functional progress and architectural findings are assessed separately. Build
+reliable capabilities and a controllable experimental platform, while testing
+which architectural choices help those capabilities under matched conditions.
+Positive, negative, and neutral recurrence findings are all informative.
+
+The current recurrence repeats computation **within one forward pass**. It does
+not yet maintain persistent memory across interactions. Long-term awareness
+experiments will require separately designed and evaluated capabilities such as
+memory, temporal continuity, and adaptation; recurrent depth alone does not
+establish those capabilities.
 
 Modern multimodal language models usually follow a structure similar to:
 
@@ -83,9 +103,13 @@ These stages are not explicitly programmed into the model. They are behaviors we
 
 ---
 
-# Primary Research Questions
+# Research Questions
 
-The initial project is designed around several questions.
+The initial architectural question is whether shared multimodal recurrence is
+useful in practice, including its costs and failure modes. The questions below
+are starting hypotheses and investigation directions, not a checklist of positive
+results required for project success. Additional questions can be introduced as
+the functional model and experimental needs develop.
 
 ### 1. Can multimodal representations emerge from random initialization?
 
@@ -105,7 +129,7 @@ We want to determine whether useful visual representations can emerge purely thr
 
 ### 2. Does recurrent depth improve multimodal reasoning?
 
-The primary hypothesis is:
+One hypothesis to test is:
 
 $$
 \text{performance}(R + 1) > \text{performance}(R)
@@ -113,13 +137,16 @@ $$
 
 for tasks requiring additional reasoning.
 
-A successful model should ideally require little recurrent computation for easy tasks and benefit from additional computation for harder ones.
+An interesting outcome would be little recurrent computation for easy tasks and
+benefits from additional computation for harder ones. No improvement or degradation
+would also be valid findings; neither prevents pursuing functional capabilities.
 
 ---
 
 ### 3. Does useful inference-time depth generalization occur?
 
-The model will be trained with randomized recurrent depth.
+A future depth-generalization experiment can train with randomized recurrent depth.
+The current capability baseline trains at a fixed depth.
 
 At evaluation time, it will be tested with recurrence depths both inside and outside the training distribution.
 
@@ -189,7 +216,8 @@ The initial architecture intentionally avoids:
 
 These may be explored later.
 
-The first objective is to isolate **multimodal recurrent computation**.
+The first objective is a functional, understandable multimodal baseline with
+which to investigate **multimodal recurrent computation**.
 
 ---
 
@@ -238,7 +266,9 @@ validation of scaling behavior
 only if earlier experiments justify it
 ```
 
-Large-scale training should not begin until the recurrent mechanism demonstrates measurable value at small scale.
+Large-scale training should wait for reliable small-scale capabilities, understood
+training behavior, and an explicit resource budget. A measured recurrence advantage
+is not a prerequisite for continued capability development.
 
 ---
 
@@ -943,6 +973,11 @@ Smaller 20–50M parameter configurations should be used during debugging.
 
 # Milestones
 
+The roadmap combines capability development and research investigations. Later
+research milestones can produce positive, negative, or neutral findings, and their
+ordering can evolve with capability needs. They do not require an architectural
+advantage before work on a useful model can continue.
+
 ## Milestone 0 — Infrastructure
 
 **Status: Complete.** CPU correctness and deterministic resume are verified,
@@ -960,6 +995,9 @@ deferred and does not block milestone completion.
 
 ## Milestone 1 — Synthetic vision
 
+**Complete:** single-object color grounding on held-out layouts.
+[Results and close-out review](docs/milestones/milestone1.md).
+
 Train a small model from random initialization to answer basic visual questions.
 
 Success criterion:
@@ -968,15 +1006,26 @@ Success criterion:
 
 ---
 
-## Milestone 2 — Multimodal recurrence
+## Milestone 2 — Question-dependent visual reasoning
 
-Introduce multi-hop synthetic questions.
+Build on single-object color grounding with varied questions about multi-object
+scenes. Start with deterministic scenes, unambiguous one-hop relational questions,
+and independently verified labels, then establish learning at a fixed recurrence
+depth on held-out examples.
 
 Success criterion:
 
-> Additional recurrent steps improve performance on tasks requiring additional reasoning.
+> The model answers varied questions about multi-object scenes on held-out examples,
+> with controls demonstrating that both the image and the question affect its
+> answers appropriately.
 
-This is the project's first major scientific milestone.
+Use image controls and same-image/different-question examples that require
+different answers. This tests question dependence as well as image dependence.
+Detailed dataset design and numerical acceptance thresholds belong to the next
+small implementation-planning increment.
+
+Recurrence comparisons can follow as research. Demonstrating an advantage from
+additional recurrent steps is not required to complete this capability milestone.
 
 ---
 
@@ -986,7 +1035,8 @@ Train using a restricted distribution of recurrent depths and evaluate beyond it
 
 Success criterion:
 
-> Inference-time recurrence greater than typical training recurrence produces useful computation rather than immediate degradation.
+> Characterize accuracy, stability, and computational cost beyond the training
+> depth distribution, including improvements, neutral effects, and degradation.
 
 ---
 
@@ -1012,7 +1062,8 @@ Success criterion:
 
 ## Milestone 6 — New training algorithms
 
-Once the baseline is well understood, begin replacing the training machinery.
+Once the baseline is well understood, evaluate changes to the training machinery
+when a concrete capability need or research question motivates them.
 
 Potential research areas include:
 
@@ -1036,44 +1087,45 @@ Only after the architecture has survived controlled experimentation should it be
 
 # What Would Count as Success?
 
-The project does **not** initially need to outperform state-of-the-art multimodal models.
+Functional success means a progressively more usable model and experimental
+platform: reliable visual grounding, question-dependent reasoning, broader
+language capability, and eventually explicitly tested memory and behavior across
+extended interactions. Define each increment through observable tasks, held-out
+evaluation, and controls. The project does not initially need to outperform
+state-of-the-art models or meet an undefined threshold of “average intelligence.”
 
-The first architecture would be considered scientifically successful if:
+Research success means credible answers to well-specified questions. Tests of
+recurrence should establish where it helps, has no meaningful effect, or hurts,
+with attention to parameter count, computational cost, stability, and generalization.
+A useful model remains a success even if recurrence offers no measured advantage.
 
-1. Visual grounding emerges from random initialization.
-2. The same recurrent core handles text and visual representations.
-3. Increasing recurrence improves some multimodal reasoning tasks.
-4. Harder tasks benefit from greater recurrent depth than easier tasks.
-5. Useful computation occurs beyond commonly seen training depths.
-6. Recurrent states remain stable over substantial unrolling.
-7. The recurrent model behaves measurably differently from a matched dense model.
-
-If these properties appear consistently, scaling becomes justified.
+Scaling decisions should follow demonstrated capabilities, training reliability,
+and available resources. No particular recurrence hypothesis must be confirmed
+before continuing model development.
 
 ---
 
 # Long-Term Direction
 
-The long-term goal is not merely to build:
+The long-term functional goal is a capable multimodal model for increasingly
+complex long-term awareness experiments. Potential future research questions
+include:
 
-```text
-vision encoder + looped LLM
-```
+* How should a model retain, retrieve, update, and forget information across interactions?
+* How can temporal continuity and adaptation be evaluated without confusing them
+  with retrieval or memorization of a fixed dataset?
+* How should computation be allocated across modalities, tokens, or recurrent steps?
+* Which architectural and training choices improve useful behavior, reliability,
+  or efficiency under controlled comparisons?
 
-but to investigate a model in which **multimodal cognition itself is recurrent**.
+This list is open-ended. Questions and priorities can evolve as the model becomes
+more capable; these are possibilities, not implemented features or committed designs.
+Persistent memory and cross-interaction behavior will need explicit mechanisms
+and tests beyond the current recurrent-depth computation.
 
-Potential future architectures could allow computation to be allocated dynamically:
-
-```text
-Visual token A   ███████████████  7 steps
-Visual token B   █████████        5 steps
-Text token A     █████            3 steps
-Text token B     █████████████    6 steps
-```
-
-Different modalities, tokens, or latent states could receive different amounts of computation depending on task difficulty.
-
-Ultimately, the project asks whether a multimodal foundation model can learn not only **what representations to construct**, but also **how long to think about them**.
+Shared multimodal recurrence remains the initial architectural investigation.
+Future experiments may explore dynamic computation allocation or other designs,
+while retaining simple baselines and changing one major variable at a time.
 
 ---
 
@@ -1095,10 +1147,13 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 0 — infrastructure and correctness, officially complete.
+**Phase:** Milestone 2 preparation — question-dependent visual reasoning through
+multi-object scenes and varied relational questions, first at fixed recurrence depth.
 
-**Next:** Milestone 1 — Synthetic vision: learn meaningful visual grounding from
-random initialization without a pretrained vision encoder.
+**Milestone 0:** Infrastructure and correctness, officially complete.
+
+**Milestone 1:** Complete for single-object color grounding on held-out layouts.
+See [results, evidence, and close-out review](docs/milestones/milestone1.md).
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1295,7 +1350,7 @@ patches, three question tokens, and five answer tokens per item. Text-only mode
 defaults to causal language modeling. Each run prints its mode, seed, device,
 question length, recurrence depth, and each step's loss before the update.
 Loss reduction here measures fitting a fixed batch; visual reasoning experiments
-remain part of Milestone 1.
+are documented separately in the [Milestone 1 results](docs/milestones/milestone1.md).
 
 | Settings | Defaults |
 | --- | --- |
@@ -1563,15 +1618,350 @@ attach that output, pass its checkpoint path under `/kaggle/input/...` to
 `--resume`, and save the continued run to a new `/kaggle/working/checkpoints/...`
 path. Keep the backend and runtime environment consistent when resuming.
 
-Immediate objective — Milestone 1:
+## Deterministic single-object color questions
 
-> Train the model from scratch to answer basic visual questions and demonstrate meaningful visual grounding on unseen synthetic examples.
+The first synthetic corpus asks **"What color is the object?"** about exactly one
+square, circle, or upright triangle. Answers are red, green, blue, or yellow.
+Images use a black background and saturated RGB colors (yellow is red + green),
+with hard edges and no antialiasing. This is a basic color-perception task;
+spatial reasoning and recurrence benefits are later research questions.
 
-Testing whether additional recurrent steps improve multi-hop reasoning follows
-in Milestone 2.
+`SyntheticShapesConfig` defaults to 32×32 images, object bounding-box sizes
+`(8, 12, 16)`, seed 0, and 1,024 training / 256 validation / 256 test examples.
+Object sizes must be distinct even integers of at least four pixels, fitting
+with a one-pixel canvas margin. Rendering samples pixel centers: squares fill
+their bounding boxes, circles are inscribed, and triangles have a top-center
+apex and bottom-edge base. Boundary pixels are included when their centers lie
+on the shape. Even-sized triangles may leave the top bounding-box row empty.
+All rendered tensors are fresh CPU `float32 [3,H,W]` values in `[0,1]`, independent
+of PyTorch's default device and dtype.
+
+A layout is `(shape, size, left, top)`. The generator enumerates shape order
+`square, circle, triangle`, configured size order, then top and left coordinates,
+and shuffles that catalog with a local `random.Random(seed)`. It allocates layouts
+without replacement to train, validation, then test. Every allocated layout
+appears in all four colors in its own split; labels are therefore balanced even
+conditional on shape, size, and position. No shape or color category is reserved
+for a held-out split. Very small splits may not sample every shape.
+
+Split sizes count images and must be positive multiples of four. The default
+catalog contains 3,345 layouts / 13,380 colored scenes. Requests exceeding the
+finite capacity fail. Layout identities and exact rendered images are disjoint
+across splits, while individual attributes such as color and size can recur.
+This tests unseen layout combinations, not unseen attribute categories.
+
+Within each split, examples are shuffled with a separate local RNG seeded by
+`f"{seed}:{split}"`. The same configuration and generator/software version
+reproduce ordered scenes and pixels without consuming global Python, NumPy, or
+PyTorch RNG state. Changing split sizes or size order can change split membership.
+Persist the manifest for an experiment instead of regenerating its splits with
+modified settings. Data format/generator version 1 describes these rules.
+
+```python
+from multimodal_loop.data.synthetic_shapes import (
+    SyntheticShapesConfig,
+    build_scene_splits,
+    make_example,
+)
+
+config = SyntheticShapesConfig()
+scenes = build_scene_splits(config)
+example = make_example(scenes["train"][0], image_size=config.image_size)
+assert example.image.shape == (3, 32, 32)
+print(example.question, example.answer, example.scene)
+```
+
+`ShapeScene` and the configuration are frozen dataclasses. `build_scene_splits`
+returns a dictionary of immutable scene tuples. `render_scene(scene,
+image_size=32)` renders one scene; `make_example` adds the fixed question,
+one-word answer, and scene metadata. Image tensors remain mutable, but repeated
+calls allocate independent storage. Scene metadata and manifest answers are
+supervision/inspection information; future model inputs must contain only images
+and question tokens (plus appropriately masked answer inputs during training).
+
+Generate the default corpus manifest and inspectable preview from the repo root:
+
+```bash
+python scripts/generate_synthetic_data.py --output-dir outputs/synthetic_shapes
+```
+
+The script prints answer frequencies and writes `manifest.json` (format version,
+configuration, software versions, and ordered scene/question/answer records) plus
+`preview.html` (up to 12 examples from each split). Open the HTML in a browser.
+It is self-contained and displays horizontal runs of actual raster pixels as
+inline SVG, together with questions, answers, and scene metadata. Images are
+regenerated from scene descriptions; the manifest does not store image arrays.
+No external renderer or new dependency is needed. Reruns replace these two files
+in the selected output directory.
+
+Use `--seed`, `--image-size`, `--object-sizes 8 12 16`, `--train-size`,
+`--validation-size`, `--test-size`, and `--preview-count` to select another valid
+configuration. This command does not tokenize examples or train a model.
+
+## Tokenization and batching for color questions
+
+`ColorQuestionTokenizer` uses vocabulary version 1, independent of dataset
+contents or example order:
+
+| ID | Token | ID | Token |
+| --- | --- | --- | --- |
+| 0 | `What` | 5 | `?` |
+| 1 | `color` | 6 | `red` |
+| 2 | `is` | 7 | `green` |
+| 3 | `the` | 8 | `blue` |
+| 4 | `object` | 9 | `yellow` |
+
+It accepts exactly `What color is the object?` and the four lowercase color
+answers. It performs no fitting or normalization and has no padding, BOS, EOS,
+or unknown-token fallback. `encode_question` returns six IDs, `encode_answer`
+returns one ID, and `decode_answer` accepts only IDs 6–9. Evaluation must count
+non-color predictions as incorrect rather than decoding them as a valid color.
+The model vocabulary must contain at least ten entries; use ten for this task.
+
+`SyntheticColorCollator(ModelConfig)` consumes a nonempty sequence of examples
+and returns a `ColorQuestionBatch`. It reads only `image`, `question`, and the
+explicit `answer`; it never reads scene metadata or derives labels from image
+pixels. This preserves the original labels when images are replaced for future
+control experiments. The batch contains no scene descriptions or identifiers.
+
+For B examples and P image patches, the batch holds CPU float32 images
+`[B,3,H,W]`, int64 `input_ids[B,7]`, boolean `target_mask[B,7]`, and a shared
+boolean `attention_mask[P+7,P+7]`. Images must match the model's configured size
+and be finite float32 CPU tensors in `[0,1]`. Stacking allocates fresh storage.
+`question_length=6` and `num_image_tokens=P` describe the alignment:
+
+```text
+text input:    What color is the object ? red
+text position:    0     1  2   3      4 5   6
+loss mask:        F     F  F   F      F F   T
+```
+
+The bidirectional prefix contains the image patches and all six question tokens.
+It cannot attend to the answer input. The last question logit, at combined
+position `P+5`, predicts the answer. The answer input has no supervised successor.
+Only that one prediction contributes to shifted cross-entropy, averaged across
+examples. There is no EOS target.
+
+```python
+import torch
+
+from multimodal_loop.data.collator import SyntheticColorCollator
+from multimodal_loop.data.synthetic_shapes import (
+    SyntheticShapesConfig,
+    build_scene_splits,
+    make_example,
+)
+from multimodal_loop.data.text import ColorQuestionTokenizer
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.model import MultimodalLoopTransformer
+from multimodal_loop.train.losses import shifted_cross_entropy
+from multimodal_loop.train.trainer import train_on_batch
+
+config = ModelConfig(vocab_size=ColorQuestionTokenizer.vocab_size)
+scenes = build_scene_splits(SyntheticShapesConfig())
+examples = [make_example(scene) for scene in scenes["train"][:4]]
+batch = SyntheticColorCollator(config)(examples)
+model = MultimodalLoopTransformer(config)
+
+logits = model(**batch.model_inputs())
+loss = shifted_cross_entropy(
+    logits,
+    batch.input_ids,
+    num_image_tokens=batch.num_image_tokens,
+    target_mask=batch.target_mask,
+)
+loss.backward()
+
+# The existing smoke trainer builds equivalent prefix and supervision masks.
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+losses = train_on_batch(
+    model,
+    optimizer,
+    batch.input_ids,
+    batch.images,
+    steps=1,
+    question_length=batch.question_length,
+)
+```
+
+`batch.model_inputs()` returns only `input_ids`, `images`, and `attention_mask`.
+`batch.to(device)` returns a new batch with all four tensors transferred together;
+initialize accelerators through the existing runtime helper first. Tensor
+transfers follow PyTorch storage semantics, so a no-op transfer may share storage.
+
+Evaluation can provide question tokens alone: use `batch.input_ids[:, :6]` with a
+fully bidirectional image/question mask of size `P+6`, then read the final logit.
+Tests compare this prediction with the answer-supervised sequence and verify
+isolation from answer inputs across recurrent depths. The dataset training path
+below uses this question-only evaluation protocol.
+
+## Fixed-depth dataset training and validation
+
+`load_synthetic_manifest(path)` validates the saved version, configuration,
+record counts, scene bounds, question/answer consistency, all-four-color coverage
+per layout, and separation between splits. It preserves the stored record order
+and hashes the exact UTF-8 file contents with SHA256. It never regenerates split
+membership from the seed. `SyntheticColorDataset(manifest, split)` renders fresh
+pixels on demand. Scene metadata stays outside the collated model inputs.
+
+Run the first baseline from the repository root:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_synthetic.py \
+  --manifest outputs/synthetic_shapes/manifest.json \
+  --output-dir outputs/color_baseline --epochs 10
+```
+
+Defaults are the existing model architecture with vocabulary size 10 and the
+manifest's image size, float32, recurrence depth **R=2**, batch size 32, AdamW
+learning rate 0.001, weight decay 0, and training seed 0. The default model has
+64-wide representations, four attention heads, FFN width 256, one prelude block,
+one shared core block, one coda block, 8×8 patches, and dropout 0. Training runs
+one optimizer update per batch, with answer-only shifted cross-entropy.
+The ten-epoch default corpus budget is **320 updates / 10,240 training examples**.
+
+Each zero-based epoch shuffles every training index exactly once using local
+`random.Random(f"{seed}:train:{epoch}")`. Loaders use one process, no workers,
+no dropped final batch, and a private PyTorch generator so iterator construction
+does not consume dropout randomness. `train_synthetic_epoch` reports the
+example-weighted mean of pre-update batch losses, example count, and step count.
+Batch size, learning rate, weight decay, seed, and recurrence depth are validated
+by `SyntheticTrainingConfig` and exposed as corresponding CLI flags.
+
+`evaluate_synthetic` runs before any updates (epoch 0) and after every epoch at
+the same fixed recurrence depth. It forwards images and only the six question
+IDs with fully bidirectional prefix attention. The final question logit predicts
+the answer. Argmax spans the full vocabulary; non-color predictions count as
+incorrect and are reported separately. Validation reports total/correct counts,
+accuracy, invalid predictions, and cross-entropy weighted by example count,
+including partial batches. Evaluation disables dropout and gradients, preserves
+model modes and random streams, and leaves parameters, gradients, and optimizer
+state unchanged. The training command never renders or evaluates test examples;
+it only validates their manifest metadata for split integrity.
+
+Use `--model-config path/to/model.yaml` for a YAML mapping of `ModelConfig`
+overrides. Unspecified fields retain defaults; vocabulary must be 10, images must
+match the manifest, and sequence capacity must fit patches plus seven text tokens.
+`--recurrence-depth` overrides the runtime depth; otherwise it follows the resolved
+model configuration. Both model and training settings are recorded explicitly.
+Epoch count is an additional budget for each invocation, not a stopping criterion
+based on validation performance. There is no early stopping or best-model selection.
+
+Each output directory contains:
+
+* `settings.json`: resolved model/training settings, tokenizer, manifest hash,
+  runtime metadata, and CPU thread count.
+* `manifest.json`: the exact corpus used by the run.
+* `metrics.json`: epoch 0 and every completed epoch's training/validation metrics.
+* `last.pt`: an atomically replaced checkpoint at the last complete epoch boundary
+  (also written at epoch 0).
+
+`save_synthetic_checkpoint` and `load_synthetic_checkpoint` use a distinct dataset
+format, sharing the existing model/AdamW serialization and atomic-write machinery.
+They save configuration, model/optimizer state, mode, backend/runtime, Python,
+NumPy, CPU and selected-device RNG state, tokenizer version/vocabulary, manifest
+contents/hash, completed epoch/step counts, and metric history. Resume validates
+these before restoring randomness, reconstructs the next epoch's shuffle, and
+requires the same backend. Exact CPU replay is tested with dropout, partial
+batches, and fresh processes; hardware/software and thread settings must match.
+Mid-epoch resume is not supported. Existing fixed-batch checkpoints and
+`scripts/train.py` retain their original behavior.
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_synthetic.py \
+  --resume outputs/color_baseline/last.pt \
+  --output-dir outputs/color_baseline --epochs 2
+```
+
+Resume permits only device, output directory, and additional epoch count; fresh
+training/model/manifest overrides are rejected. The embedded manifest permits
+resume after the original file disappears. Checkpoint history is authoritative
+and repairs stale `metrics.json` output. Fresh runs reject an output directory
+that already contains run artifacts.
+
+On Kaggle, after installing the package without replacing its accelerator-specific
+PyTorch (see the accelerator setup above), use a writable output directory:
+
+```bash
+python scripts/train_synthetic.py --device cuda:0 \
+  --manifest /kaggle/working/synthetic_shapes/manifest.json \
+  --output-dir /kaggle/working/color_baseline --epochs 10
+```
+
+This selects one GPU, including in a 2×T4 runtime. `--device xla` uses the existing
+single-device TPU path, whose hardware validation remains deferred. The new dataset
+training/resume path is CPU-tested; the earlier Kaggle sign-off covers the
+Milestone 0 accelerator infrastructure.
+
+Baseline history and experimental results are recorded in
+[Milestone 1 — results and close-out](docs/milestones/milestone1.md).
+
+## Image controls on the same trained model
+
+Evaluate the checkpoint's embedded validation split with correct images, five
+predetermined image shuffles (seeds 0–4), and blank images:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/evaluate.py \
+  --checkpoint outputs/color_baseline/last.pt \
+  --output-dir outputs/color_controls
+```
+
+The command uses the checkpoint's saved runtime recurrence depth and batch size
+(R=2 and 32 for this baseline), model weights, and corpus. It performs no training,
+selects no checkpoint, and defaults to validation. Use `--split test` explicitly
+for a frozen test evaluation; only the selected split is rendered and evaluated. The existing
+same-backend checkpoint restriction applies; `--device cuda:0` evaluates a CUDA
+checkpoint on one GPU. This increment was validated on CPU.
+
+`evaluate_image_controls(model, dataset, recurrence_depth=..., batch_size=32,
+shuffle_seeds=(0, 1, 2, 3, 4))` reuses question-only evaluation and replaces only
+the completed batch's image tensor. Recipient questions, original answer targets,
+example order, attention masks, image-token counts, positional/modality embeddings,
+and recurrence depth remain identical between conditions. Scene metadata is never
+passed to the model. Blank images are all-zero tensors with the same shape and
+dtype, so image patch tokens remain present; blank does not mean `images=None`.
+
+Each shuffle permutes the entire selected split with local
+`random.Random(seed).shuffle`, independently of batch size. Every donor image is
+used exactly once. Self-pairings and same-color pairings are retained, with no
+label-based filtering. Donor answers never replace recipient targets. Original
+answer fields are used only to report the fraction of same-color pairings after
+the permutation is fixed. Ordinary random pairings have expected color agreement
+of 25% on this balanced corpus, with finite-sample variation. Blank images also
+remove the object entirely, so the shuffled control additionally checks performance
+when real corpus images remain present but their pairing is broken.
+
+Use `--batch-size` to override evaluation batching and `--shuffle-seeds 0 1 2 3 4`
+to specify distinct integer seeds. All examples are included, even with a partial
+last batch. Model modes, parameters, gradients, optimizer state, and random streams
+are preserved during evaluation. The CLI loads training RNG state through the
+existing checkpoint loader; it never updates the saved checkpoint or training
+metrics. `--split` accepts `validation` (default) or `test`; there is no recurrence
+override. Donor images always come exclusively from the selected split.
+
+The printed table includes counts, accuracy, cross-entropy, and invalid predictions
+for every condition. `controls.json` contains these metrics, every donor permutation
+(recipient index → donor index in manifest order), seeds and same-color pairing
+fractions, shuffled mean/min/max accuracy and loss, and correct-minus-control
+accuracy gaps expressed as fractions. It also records checkpoint/manifest SHA256,
+training progress, model/training/evaluation settings, runtime, and CPU thread count.
+An existing report is rejected; choose a new output directory for another run.
+The five shuffle results describe pairing variation on one validation set, not five
+independent datasets or independent training runs.
+
+Validation and frozen-test results, full protocols, and limitations are recorded in
+[Milestone 1 — results and close-out](docs/milestones/milestone1.md).
+
+Immediate objective — Milestone 2 preparation:
+
+> Establish deterministic multi-object scenes and varied one-hop relational questions,
+> then verify held-out learning at fixed recurrence depth with controls for image
+> and question dependence.
 
 Scale comes later.
 
-First, prove the loop matters.
+First, build and measure useful capabilities. Investigate where recurrence helps
+alongside that progress.
 # multi-modal-loop-llm
 Multi-Modal Loop LLM experiment
