@@ -2,7 +2,7 @@
 
 import random
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, replace
 from math import isfinite
 
 import numpy as np
@@ -10,11 +10,12 @@ import torch
 from torch.nn import functional as F
 
 from multimodal_loop.data.collator import ColorQuestionBatch
+from multimodal_loop.data.multimodal import SyntheticColorDataset
 from multimodal_loop.data.text import ColorQuestionTokenizer
 from multimodal_loop.model.attention import build_prefix_mask
 from multimodal_loop.model.model import MultimodalLoopTransformer
 from multimodal_loop.train.runtime import finish_step, preserve_device_rng
-from multimodal_loop.train.synthetic import _integer
+from multimodal_loop.train.synthetic import SyntheticTrainingConfig, _integer, synthetic_loader
 
 
 @dataclass(frozen=True)
@@ -92,3 +93,93 @@ def evaluate_synthetic(
     if total == 0:
         raise ValueError("evaluation requires at least one example")
     return EvaluationMetrics(total, correct, correct / total, invalid, loss_sum / total)
+
+
+def _image_control_batches(batches, dataset, *, permutation=None, blank=False):
+    """Replace only pixels; donor indices address the full dataset in stored order."""
+    offset = 0
+    for batch in batches:
+        count = batch.input_ids.shape[0]
+        if blank:
+            batch = replace(batch, images=torch.zeros_like(batch.images))
+        elif permutation is not None:
+            images = torch.stack(
+                [dataset[index].image for index in permutation[offset : offset + count]]
+            )
+            batch = replace(batch, images=images)
+        offset += count
+        yield batch
+
+
+def evaluate_image_controls(
+    model: MultimodalLoopTransformer,
+    dataset: SyntheticColorDataset,
+    *,
+    recurrence_depth: int,
+    batch_size: int = 32,
+    shuffle_seeds: tuple[int, ...] = (0, 1, 2, 3, 4),
+) -> dict:
+    """Compare correct, permuted and zero pixels without changing supervision.
+
+    Returns JSON-compatible metrics and donor permutations (recipient index ->
+    donor index). Permutations include ordinary self/same-color coincidences;
+    labels are used only for a diagnostic pairing fraction, never donor selection.
+    The input dataset's stored order is retained in every condition. No updates
+    are performed and evaluation preserves modes, gradients and random streams.
+    """
+    settings = SyntheticTrainingConfig(batch_size=batch_size, recurrence_depth=recurrence_depth)
+    seeds = tuple(shuffle_seeds)
+    if not seeds:
+        raise ValueError("shuffle_seeds must not be empty")
+    for seed in seeds:
+        _integer("shuffle seed", seed)
+    if len(set(seeds)) != len(seeds):
+        raise ValueError("shuffle seeds must be distinct")
+    if len(dataset) == 0:
+        raise ValueError("image controls require at least one example")
+
+    def score(*, permutation=None, blank=False):
+        batches = synthetic_loader(dataset, model.config, settings)
+        return asdict(
+            evaluate_synthetic(
+                model,
+                _image_control_batches(batches, dataset, permutation=permutation, blank=blank),
+                recurrence_depth=recurrence_depth,
+            )
+        )
+
+    correct = score()
+    shuffled = []
+    # Read supervision only for reporting; never inspect scene metadata.
+    answers = [dataset[index].answer for index in range(len(dataset))]
+    for seed in seeds:
+        permutation = list(range(len(dataset)))
+        random.Random(seed).shuffle(permutation)
+        metrics = score(permutation=permutation)
+        shuffled.append(
+            {
+                "seed": seed,
+                "permutation": permutation,
+                "same_color_pairing_fraction": sum(
+                    answers[index] == answers[donor] for index, donor in enumerate(permutation)
+                )
+                / len(dataset),
+                "metrics": metrics,
+                "accuracy_gap": correct["accuracy"] - metrics["accuracy"],
+            }
+        )
+    blank = score(blank=True)
+    summary = {}
+    for name in ("accuracy", "loss"):
+        values = [row["metrics"][name] for row in shuffled]
+        summary[name] = {"mean": sum(values) / len(values), "min": min(values), "max": max(values)}
+    return {
+        "correct": correct,
+        "shuffled": shuffled,
+        "blank": blank,
+        "shuffled_summary": summary,
+        "accuracy_gaps": {
+            "correct_minus_shuffled_mean": correct["accuracy"] - summary["accuracy"]["mean"],
+            "correct_minus_blank": correct["accuracy"] - blank["accuracy"],
+        },
+    }

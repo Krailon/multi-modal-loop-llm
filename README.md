@@ -1105,8 +1105,10 @@ questions, disjoint layout splits, and a manifest/visual preview. A fixed tokeni
 and collator now connect examples to model inputs and answer-only supervision.
 Manifest-backed dataset training, question-only validation, and deterministic
 epoch-boundary CPU resume are implemented. The fixed-depth validation baseline
-is described below; shuffled- and missing-image controls are the next increment
-before claiming held-out visual grounding.
+and image controls are described below. Correct images achieve 100% validation
+accuracy, versus 25.078% averaged over five shuffles and 25% with blank images.
+This supports image-dependent color answering on held-out layouts; broader visual
+reasoning and recurrence benefits remain untested.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1867,8 +1869,92 @@ non-color predictions. All epoch metrics and the final checkpoint are saved
 locally under `outputs/color_baseline/` (ignored generated artifacts). The run
 used the full planned budget without tuning or selecting a best checkpoint.
 The test split was not evaluated. This establishes that the training path can
-learn the held-out color task; comparison with shuffled and missing images is
-still required before claiming visual grounding. No recurrence benefit is claimed.
+learn the held-out color task. The image controls below test whether those
+answers depend on the image. No recurrence benefit is claimed.
+
+## Image controls on the same trained model
+
+Evaluate the checkpoint's embedded validation split with correct images, five
+predetermined image shuffles (seeds 0–4), and blank images:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/evaluate.py \
+  --checkpoint outputs/color_baseline/last.pt \
+  --output-dir outputs/color_controls
+```
+
+The command uses the checkpoint's saved runtime recurrence depth and batch size
+(R=2 and 32 for this baseline), model weights, and corpus. It performs no training,
+selects no checkpoint, and never renders or evaluates the test split. The existing
+same-backend checkpoint restriction applies; `--device cuda:0` evaluates a CUDA
+checkpoint on one GPU. This increment was validated on CPU.
+
+`evaluate_image_controls(model, dataset, recurrence_depth=..., batch_size=32,
+shuffle_seeds=(0, 1, 2, 3, 4))` reuses question-only evaluation and replaces only
+the completed batch's image tensor. Recipient questions, original answer targets,
+example order, attention masks, image-token counts, positional/modality embeddings,
+and recurrence depth remain identical between conditions. Scene metadata is never
+passed to the model. Blank images are all-zero tensors with the same shape and
+dtype, so image patch tokens remain present; blank does not mean `images=None`.
+
+Each shuffle permutes the entire validation split with local
+`random.Random(seed).shuffle`, independently of batch size. Every donor image is
+used exactly once. Self-pairings and same-color pairings are retained, with no
+label-based filtering. Donor answers never replace recipient targets. Original
+answer fields are used only to report the fraction of same-color pairings after
+the permutation is fixed. Ordinary random pairings have expected color agreement
+of 25% on this balanced corpus, with finite-sample variation. Blank images also
+remove the object entirely, so the shuffled control additionally checks performance
+when real corpus images remain present but their pairing is broken.
+
+Use `--batch-size` to override evaluation batching and `--shuffle-seeds 0 1 2 3 4`
+to specify distinct integer seeds. All examples are included, even with a partial
+last batch. Model modes, parameters, gradients, optimizer state, and random streams
+are preserved during evaluation. The CLI loads training RNG state through the
+existing checkpoint loader; it never updates the saved checkpoint or training
+metrics. There are no split or recurrence overrides in this command.
+
+The printed table includes counts, accuracy, cross-entropy, and invalid predictions
+for every condition. `controls.json` contains these metrics, every donor permutation
+(recipient index → donor index in manifest order), seeds and same-color pairing
+fractions, shuffled mean/min/max accuracy and loss, and correct-minus-control
+accuracy gaps expressed as fractions. It also records checkpoint/manifest SHA256,
+training progress, model/training/evaluation settings, runtime, and CPU thread count.
+An existing report is rejected; choose a new output directory for another run.
+The five shuffle results describe pairing variation on one validation set, not five
+independent datasets or independent training runs.
+
+### Baseline control results
+
+The existing epoch-10 checkpoint was evaluated without retraining on all 256
+validation examples, using R=2, batch size 32, float32 CPU, and one compute thread
+in the baseline environment above. Its SHA256 is
+`08fa29639f7566829c0c4e5172b7945b95462c81c4f6fd483fcf55ad6c0b0047`.
+
+| Image condition | Correct/total | Accuracy | Cross-entropy |
+| --- | --- | --- | --- |
+| Correct | 256/256 | 100.0000% | 0.003961 |
+| Shuffled, seed 0 | 63/256 | 24.6094% | 5.599248 |
+| Shuffled, seed 1 | 56/256 | 21.8750% | 5.829057 |
+| Shuffled, seed 2 | 77/256 | 30.0781% | 5.167806 |
+| Shuffled, seed 3 | 55/256 | 21.4844% | 5.828571 |
+| Shuffled, seed 4 | 70/256 | 27.3438% | 5.385539 |
+| Blank | 64/256 | 25.0000% | 4.397621 |
+
+Shuffled mean accuracy was **25.0781%**, with range **21.4844–30.0781%**;
+mean cross-entropy was **5.562044**, with range **5.167806–5.829057**.
+Correct-image accuracy exceeded the shuffled mean by **74.9219 percentage points**
+and blank-image accuracy by **75 percentage points**. All conditions produced zero
+non-color predictions. Each shuffle's accuracy equaled its realized same-color
+pairing fraction, consistent with the model following the donor image's color.
+Correct-image metrics exactly reproduced the saved baseline, and the checkpoint
+hash remained unchanged. The complete report is saved locally at
+`outputs/color_controls/controls.json` (an ignored generated artifact).
+
+These controls support image-dependent color answering on held-out layouts in
+this single-object task. They establish neither broader visual reasoning nor a
+benefit from recurrence. The test split remains unevaluated, and no shuffle seed
+or checkpoint was selected based on its result.
 
 Immediate objective — Milestone 1:
 
