@@ -945,6 +945,10 @@ Smaller 20–50M parameter configurations should be used during debugging.
 
 ## Milestone 0 — Infrastructure
 
+**Status: Complete.** CPU correctness and deterministic resume are verified,
+and single-device CUDA validation passed on Kaggle. TPU hardware validation is
+deferred and does not block milestone completion.
+
 * model runs forward and backward
 * image and text batches work
 * recurrent depth can change dynamically
@@ -1091,7 +1095,10 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 0 — infrastructure and correctness, complete for the CPU baseline.
+**Phase:** Milestone 0 — infrastructure and correctness, officially complete.
+
+**Next:** Milestone 1 — Synthetic vision: learn meaningful visual grounding from
+random initialization without a pretrained vision encoder.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1109,9 +1116,10 @@ and a small AdamW training script are implemented and tested on fixed synthetic
 batches, including loss reduction and optimizer-state continuity across calls.
 CPU checkpoint save/load and deterministic training resume are implemented.
 Single-device CUDA/TPU training and same-backend resume paths are also implemented;
-actual GPU/TPU validation remains pending. The opt-in hardware suite below records
-that validation separately from the CPU baseline.
-Tests compare uninterrupted and resumed training with dropout enabled, including
+single-device CUDA validation passed in a Kaggle 2×T4 environment. The
+user-confirmed hardware test result was `4 passed in 69.91s (0:01:09)`.
+TPU hardware validation is deferred and does not block Milestone 0 completion.
+CPU tests compare uninterrupted and resumed training with dropout enabled, including
 exact loss, parameter, optimizer-state, and RNG equality across process restarts.
 The package also builds and installs as a wheel, with imports, training, and a
 checkpoint round trip verified outside the source checkout.
@@ -1543,9 +1551,11 @@ hardware cases. `MULTIMODAL_LOOP_TEST_DEVICE=cpu` can exercise the same subproce
 harness locally, but does not establish CUDA/TPU support.
 
 Record the selected Kaggle accelerator, printed runtime versions, and test output
-when running these checks. Until real hardware checks pass, CUDA and TPU remain
-implemented but unverified on those runtimes. CPU tests and mocked dispatch tests
-are not substitutes for accelerator validation.
+when running these checks. Single-device CUDA validation has passed in a Kaggle
+2×T4 environment, with the user-confirmed result `4 passed in 69.91s (0:01:09)`.
+This validates the single-device path on that environment; multi-GPU execution
+remains outside the supported scope. TPU support is implemented, with hardware
+validation deferred and not required for Milestone 0 sign-off.
 
 Files under `/kaggle/working/checkpoints` must be retained as notebook output
 using Kaggle's Save Version workflow before the session ends. In a later session,
@@ -1553,9 +1563,12 @@ attach that output, pass its checkpoint path under `/kaggle/input/...` to
 `--resume`, and save the continued run to a new `/kaggle/working/checkpoints/...`
 path. Keep the backend and runtime environment consistent when resuming.
 
-Immediate objective:
+Immediate objective — Milestone 1:
 
-> Build a small end-to-end multimodal loop transformer and determine whether recurrent depth improves controlled synthetic visual reasoning.
+> Train the model from scratch to answer basic visual questions and demonstrate meaningful visual grounding on unseen synthetic examples.
+
+Testing whether additional recurrent steps improve multi-hop reasoning follows
+in Milestone 2.
 
 Scale comes later.
 
