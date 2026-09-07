@@ -1101,9 +1101,10 @@ grounding from random initialization without a pretrained vision encoder.
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
 The first Milestone 1 data increment implements deterministic single-object color
-questions, disjoint layout splits, and a manifest/visual preview. Tokenization,
-batching, training on these scenes, and held-out grounding measurements follow
-separately; no learned visual-grounding result is claimed yet.
+questions, disjoint layout splits, and a manifest/visual preview. A fixed tokenizer
+and collator now connect examples to model inputs and answer-only supervision.
+Dataset iteration, training on these scenes, and held-out grounding measurements
+follow separately; no learned visual-grounding result is claimed yet.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1647,6 +1648,103 @@ in the selected output directory.
 Use `--seed`, `--image-size`, `--object-sizes 8 12 16`, `--train-size`,
 `--validation-size`, `--test-size`, and `--preview-count` to select another valid
 configuration. This command does not tokenize examples or train a model.
+
+## Tokenization and batching for color questions
+
+`ColorQuestionTokenizer` uses vocabulary version 1, independent of dataset
+contents or example order:
+
+| ID | Token | ID | Token |
+| --- | --- | --- | --- |
+| 0 | `What` | 5 | `?` |
+| 1 | `color` | 6 | `red` |
+| 2 | `is` | 7 | `green` |
+| 3 | `the` | 8 | `blue` |
+| 4 | `object` | 9 | `yellow` |
+
+It accepts exactly `What color is the object?` and the four lowercase color
+answers. It performs no fitting or normalization and has no padding, BOS, EOS,
+or unknown-token fallback. `encode_question` returns six IDs, `encode_answer`
+returns one ID, and `decode_answer` accepts only IDs 6–9. Evaluation must count
+non-color predictions as incorrect rather than decoding them as a valid color.
+The model vocabulary must contain at least ten entries; use ten for this task.
+
+`SyntheticColorCollator(ModelConfig)` consumes a nonempty sequence of examples
+and returns a `ColorQuestionBatch`. It reads only `image`, `question`, and the
+explicit `answer`; it never reads scene metadata or derives labels from image
+pixels. This preserves the original labels when images are replaced for future
+control experiments. The batch contains no scene descriptions or identifiers.
+
+For B examples and P image patches, the batch holds CPU float32 images
+`[B,3,H,W]`, int64 `input_ids[B,7]`, boolean `target_mask[B,7]`, and a shared
+boolean `attention_mask[P+7,P+7]`. Images must match the model's configured size
+and be finite float32 CPU tensors in `[0,1]`. Stacking allocates fresh storage.
+`question_length=6` and `num_image_tokens=P` describe the alignment:
+
+```text
+text input:    What color is the object ? red
+text position:    0     1  2   3      4 5   6
+loss mask:        F     F  F   F      F F   T
+```
+
+The bidirectional prefix contains the image patches and all six question tokens.
+It cannot attend to the answer input. The last question logit, at combined
+position `P+5`, predicts the answer. The answer input has no supervised successor.
+Only that one prediction contributes to shifted cross-entropy, averaged across
+examples. There is no EOS target.
+
+```python
+import torch
+
+from multimodal_loop.data.collator import SyntheticColorCollator
+from multimodal_loop.data.synthetic_shapes import (
+    SyntheticShapesConfig,
+    build_scene_splits,
+    make_example,
+)
+from multimodal_loop.data.text import ColorQuestionTokenizer
+from multimodal_loop.model.config import ModelConfig
+from multimodal_loop.model.model import MultimodalLoopTransformer
+from multimodal_loop.train.losses import shifted_cross_entropy
+from multimodal_loop.train.trainer import train_on_batch
+
+config = ModelConfig(vocab_size=ColorQuestionTokenizer.vocab_size)
+scenes = build_scene_splits(SyntheticShapesConfig())
+examples = [make_example(scene) for scene in scenes["train"][:4]]
+batch = SyntheticColorCollator(config)(examples)
+model = MultimodalLoopTransformer(config)
+
+logits = model(**batch.model_inputs())
+loss = shifted_cross_entropy(
+    logits,
+    batch.input_ids,
+    num_image_tokens=batch.num_image_tokens,
+    target_mask=batch.target_mask,
+)
+loss.backward()
+
+# The existing smoke trainer builds equivalent prefix and supervision masks.
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+losses = train_on_batch(
+    model,
+    optimizer,
+    batch.input_ids,
+    batch.images,
+    steps=1,
+    question_length=batch.question_length,
+)
+```
+
+`batch.model_inputs()` returns only `input_ids`, `images`, and `attention_mask`.
+`batch.to(device)` returns a new batch with all four tensors transferred together;
+initialize accelerators through the existing runtime helper first. Tensor
+transfers follow PyTorch storage semantics, so a no-op transfer may share storage.
+
+Evaluation can provide question tokens alone: use `batch.input_ids[:, :6]` with a
+fully bidirectional image/question mask of size `P+6`, then read the final logit.
+Tests compare this prediction with the answer-supervised sequence and verify
+isolation from answer inputs across recurrent depths. Dataset iteration,
+manifest loading, and evaluation metrics remain the next increment.
 
 Immediate objective — Milestone 1:
 
