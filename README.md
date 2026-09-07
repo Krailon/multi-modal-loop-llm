@@ -1103,8 +1103,10 @@ grounding from random initialization without a pretrained vision encoder.
 The first Milestone 1 data increment implements deterministic single-object color
 questions, disjoint layout splits, and a manifest/visual preview. A fixed tokenizer
 and collator now connect examples to model inputs and answer-only supervision.
-Dataset iteration, training on these scenes, and held-out grounding measurements
-follow separately; no learned visual-grounding result is claimed yet.
+Manifest-backed dataset training, question-only validation, and deterministic
+epoch-boundary CPU resume are implemented. The fixed-depth validation baseline
+is described below; shuffled- and missing-image controls are the next increment
+before claiming held-out visual grounding.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1743,8 +1745,130 @@ transfers follow PyTorch storage semantics, so a no-op transfer may share storag
 Evaluation can provide question tokens alone: use `batch.input_ids[:, :6]` with a
 fully bidirectional image/question mask of size `P+6`, then read the final logit.
 Tests compare this prediction with the answer-supervised sequence and verify
-isolation from answer inputs across recurrent depths. Dataset iteration,
-manifest loading, and evaluation metrics remain the next increment.
+isolation from answer inputs across recurrent depths. The dataset training path
+below uses this question-only evaluation protocol.
+
+## Fixed-depth dataset training and validation
+
+`load_synthetic_manifest(path)` validates the saved version, configuration,
+record counts, scene bounds, question/answer consistency, all-four-color coverage
+per layout, and separation between splits. It preserves the stored record order
+and hashes the exact UTF-8 file contents with SHA256. It never regenerates split
+membership from the seed. `SyntheticColorDataset(manifest, split)` renders fresh
+pixels on demand. Scene metadata stays outside the collated model inputs.
+
+Run the first baseline from the repository root:
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_synthetic.py \
+  --manifest outputs/synthetic_shapes/manifest.json \
+  --output-dir outputs/color_baseline --epochs 10
+```
+
+Defaults are the existing model architecture with vocabulary size 10 and the
+manifest's image size, float32, recurrence depth **R=2**, batch size 32, AdamW
+learning rate 0.001, weight decay 0, and training seed 0. The default model has
+64-wide representations, four attention heads, FFN width 256, one prelude block,
+one shared core block, one coda block, 8×8 patches, and dropout 0. Training runs
+one optimizer update per batch, with answer-only shifted cross-entropy.
+The ten-epoch default corpus budget is **320 updates / 10,240 training examples**.
+
+Each zero-based epoch shuffles every training index exactly once using local
+`random.Random(f"{seed}:train:{epoch}")`. Loaders use one process, no workers,
+no dropped final batch, and a private PyTorch generator so iterator construction
+does not consume dropout randomness. `train_synthetic_epoch` reports the
+example-weighted mean of pre-update batch losses, example count, and step count.
+Batch size, learning rate, weight decay, seed, and recurrence depth are validated
+by `SyntheticTrainingConfig` and exposed as corresponding CLI flags.
+
+`evaluate_synthetic` runs before any updates (epoch 0) and after every epoch at
+the same fixed recurrence depth. It forwards images and only the six question
+IDs with fully bidirectional prefix attention. The final question logit predicts
+the answer. Argmax spans the full vocabulary; non-color predictions count as
+incorrect and are reported separately. Validation reports total/correct counts,
+accuracy, invalid predictions, and cross-entropy weighted by example count,
+including partial batches. Evaluation disables dropout and gradients, preserves
+model modes and random streams, and leaves parameters, gradients, and optimizer
+state unchanged. The training command never renders or evaluates test examples;
+it only validates their manifest metadata for split integrity.
+
+Use `--model-config path/to/model.yaml` for a YAML mapping of `ModelConfig`
+overrides. Unspecified fields retain defaults; vocabulary must be 10, images must
+match the manifest, and sequence capacity must fit patches plus seven text tokens.
+`--recurrence-depth` overrides the runtime depth; otherwise it follows the resolved
+model configuration. Both model and training settings are recorded explicitly.
+Epoch count is an additional budget for each invocation, not a stopping criterion
+based on validation performance. There is no early stopping or best-model selection.
+
+Each output directory contains:
+
+* `settings.json`: resolved model/training settings, tokenizer, manifest hash,
+  runtime metadata, and CPU thread count.
+* `manifest.json`: the exact corpus used by the run.
+* `metrics.json`: epoch 0 and every completed epoch's training/validation metrics.
+* `last.pt`: an atomically replaced checkpoint at the last complete epoch boundary
+  (also written at epoch 0).
+
+`save_synthetic_checkpoint` and `load_synthetic_checkpoint` use a distinct dataset
+format, sharing the existing model/AdamW serialization and atomic-write machinery.
+They save configuration, model/optimizer state, mode, backend/runtime, Python,
+NumPy, CPU and selected-device RNG state, tokenizer version/vocabulary, manifest
+contents/hash, completed epoch/step counts, and metric history. Resume validates
+these before restoring randomness, reconstructs the next epoch's shuffle, and
+requires the same backend. Exact CPU replay is tested with dropout, partial
+batches, and fresh processes; hardware/software and thread settings must match.
+Mid-epoch resume is not supported. Existing fixed-batch checkpoints and
+`scripts/train.py` retain their original behavior.
+
+```bash
+OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 python scripts/train_synthetic.py \
+  --resume outputs/color_baseline/last.pt \
+  --output-dir outputs/color_baseline --epochs 2
+```
+
+Resume permits only device, output directory, and additional epoch count; fresh
+training/model/manifest overrides are rejected. The embedded manifest permits
+resume after the original file disappears. Checkpoint history is authoritative
+and repairs stale `metrics.json` output. Fresh runs reject an output directory
+that already contains run artifacts.
+
+On Kaggle, after installing the package without replacing its accelerator-specific
+PyTorch (see the accelerator setup above), use a writable output directory:
+
+```bash
+python scripts/train_synthetic.py --device cuda:0 \
+  --manifest /kaggle/working/synthetic_shapes/manifest.json \
+  --output-dir /kaggle/working/color_baseline --epochs 10
+```
+
+This selects one GPU, including in a 2×T4 runtime. `--device xla` uses the existing
+single-device TPU path, whose hardware validation remains deferred. The new dataset
+training/resume path is CPU-tested; the earlier Kaggle sign-off covers the
+Milestone 0 accelerator infrastructure.
+
+### First CPU validation baseline
+
+The predetermined ten-epoch run completed with the defaults above: corpus seed 0,
+training seed 0, R=2, batch size 32, and 320 AdamW updates. It used Python 3.12.3,
+PyTorch 2.14.0+cpu, float32, and one CPU compute thread (`OMP_NUM_THREADS=1`,
+`MKL_NUM_THREADS=1`). The exact manifest SHA256 is
+`4b15b07dd6728ae3a3f37ca4fe900288e184ed2ae6ba2261ea515ffb357261a2`.
+
+| Epoch | Updates | Training loss | Validation loss | Validation accuracy |
+| --- | --- | --- | --- | --- |
+| 0 | 0 | — | 2.540769 | 64/256 (25.00%) |
+| 1 | 32 | 1.559847 | 1.351554 | 136/256 (53.12%) |
+| 2 | 64 | 0.739264 | 0.127205 | 255/256 (99.61%) |
+| 3 | 96 | 0.057924 | 0.026079 | 256/256 (100%) |
+| 10 | 320 | 0.004216 | 0.003961 | 256/256 (100%) |
+
+Accuracy stayed at 100% from epochs 3 through 10; the final evaluation had zero
+non-color predictions. All epoch metrics and the final checkpoint are saved
+locally under `outputs/color_baseline/` (ignored generated artifacts). The run
+used the full planned budget without tuning or selecting a best checkpoint.
+The test split was not evaluated. This establishes that the training path can
+learn the held-out color task; comparison with shuffled and missing images is
+still required before claiming visual grounding. No recurrence benefit is claimed.
 
 Immediate objective — Milestone 1:
 

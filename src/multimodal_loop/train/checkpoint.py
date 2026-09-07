@@ -195,29 +195,7 @@ def save_checkpoint(
     The parent directory is created if needed; a failed write preserves an
     existing destination. Call synchronously between optimizer updates.
     """
-    parameters = list(model.parameters())
-    model_state = model.state_dict()
-    device = resolve_device(parameters[0].device)
-    if any(value.device != device for value in model_state.values()):
-        raise ValueError("checkpoint model must use a single device")
-    dtype = parameters[0].dtype
-    if dtype not in _DTYPES.values() or any(p.dtype != dtype for p in parameters):
-        raise ValueError("checkpoint model must have uniform float32 or float64 dtype")
-    if device.type != "cpu" and dtype != torch.float32:
-        raise ValueError("accelerator checkpoint dtype must be float32")
-    if any(not p.requires_grad for p in parameters):
-        raise ValueError("checkpoint requires all model parameters to be trainable")
-    if any(module.training != model.training for module in model.modules()):
-        raise ValueError("checkpoint requires a uniform train/eval mode")
-    if type(optimizer) is not AdamW:
-        raise TypeError("checkpoint supports AdamW only")
-    if len(optimizer.param_groups) != 1 or [id(p) for p in optimizer.param_groups[0]["params"]] != [
-        id(p) for p in parameters
-    ]:
-        raise ValueError("checkpoint requires one AdamW group in model parameter order")
-    if device.type != "cpu":
-        _validate_accelerator_optimizer(optimizer.param_groups[0])
-    optimizer_state = optimizer.state_dict()
+    device = resolve_device(next(model.parameters()).device)
     with preserve_device_rng(device) as device_rng:
         # Save only at completed update boundaries. Flush lazy validation/copies
         # without changing the random stream that the next update will use.
@@ -228,15 +206,8 @@ def save_checkpoint(
         )
         payload = {
             "format_version": _FORMAT_VERSION,
-            "backend": device.type,
-            "runtime": runtime_metadata(device),
+            **_snapshot_model_optimizer(model, optimizer),
             "device_rng_state": device_rng,
-            "config": asdict(model.config),
-            "model_dtype": str(dtype).removeprefix("torch."),
-            "model_training": model.training,
-            "model_state": _cpu_snapshot(model_state),
-            "optimizer_type": "AdamW",
-            "optimizer_state": _cpu_snapshot(optimizer_state),
             "completed_steps": completed_steps,
             "input_ids": _cpu_snapshot(input_ids),
             "images": _cpu_snapshot(images),
@@ -245,23 +216,8 @@ def save_checkpoint(
             "seed": seed,
             "rng_state": _capture_rng(),
         }
-        _validate_optimizer_state(payload["optimizer_state"], parameters)
         finish_step(device)
-    path = Path(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary_path = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
-        ) as temporary:
-            temporary_path = Path(temporary.name)
-            torch.save(payload, temporary)
-            temporary.flush()
-            os.fsync(temporary.fileno())
-        os.replace(temporary_path, path)
-    finally:
-        if temporary_path is not None:
-            temporary_path.unlink(missing_ok=True)
+    _atomic_save(payload, path)
 
 
 def load_checkpoint(path: str | Path, *, device: str | torch.device = "cpu") -> LoadedCheckpoint:
@@ -312,6 +268,100 @@ def load_checkpoint(path: str | Path, *, device: str | torch.device = "cpu") -> 
             for key, value in metadata.items()
         ):
             raise ValueError("checkpoint runtime metadata must contain strings or None")
+    model = _restore_model(payload, device)
+    _validate_training_state(
+        model,
+        payload["input_ids"],
+        payload["images"],
+        payload["completed_steps"],
+        payload["question_length"],
+        payload["recurrence_depth"],
+        payload["seed"],
+    )
+    # Transfer parameters before constructing the optimizer: Module.to may
+    # replace Parameter objects on XLA. load_state_dict places moments on their
+    # parameters and retains CPU step counters for non-capturable AdamW.
+    with preserve_device_rng(device):
+        model.to(device)
+        optimizer = AdamW(model.parameters())
+        optimizer.load_state_dict(payload["optimizer_state"])
+        input_ids = payload["input_ids"].to(device)
+        images = None if payload["images"] is None else payload["images"].to(device)
+        finish_step(device)
+    result = LoadedCheckpoint(
+        model=model,
+        optimizer=optimizer,
+        completed_steps=payload["completed_steps"],
+        input_ids=input_ids,
+        images=images,
+        question_length=payload["question_length"],
+        recurrence_depth=payload["recurrence_depth"],
+        seed=payload["seed"],
+    )
+    _restore_rng(payload["rng_state"], device, payload.get("device_rng_state"))
+    return result
+
+
+def _snapshot_model_optimizer(model: MultimodalLoopTransformer, optimizer: AdamW) -> dict:
+    """Shared single-device validation and independent CPU copies for both formats."""
+    parameters = list(model.parameters())
+    model_state = model.state_dict()
+    device = resolve_device(parameters[0].device)
+    if any(value.device != device for value in model_state.values()):
+        raise ValueError("checkpoint model must use a single device")
+    dtype = parameters[0].dtype
+    if dtype not in _DTYPES.values() or any(p.dtype != dtype for p in parameters):
+        raise ValueError("checkpoint model must have uniform float32 or float64 dtype")
+    if device.type != "cpu" and dtype != torch.float32:
+        raise ValueError("accelerator checkpoint dtype must be float32")
+    if any(not p.requires_grad for p in parameters):
+        raise ValueError("checkpoint requires all model parameters to be trainable")
+    if any(module.training != model.training for module in model.modules()):
+        raise ValueError("checkpoint requires a uniform train/eval mode")
+    if type(optimizer) is not AdamW:
+        raise TypeError("checkpoint supports AdamW only")
+    if len(optimizer.param_groups) != 1 or [id(p) for p in optimizer.param_groups[0]["params"]] != [
+        id(p) for p in parameters
+    ]:
+        raise ValueError("checkpoint requires one AdamW group in model parameter order")
+    if device.type != "cpu":
+        _validate_accelerator_optimizer(optimizer.param_groups[0])
+    optimizer_state = optimizer.state_dict()
+    payload = {
+        "backend": device.type,
+        "runtime": runtime_metadata(device),
+        "config": asdict(model.config),
+        "model_dtype": str(dtype).removeprefix("torch."),
+        "model_training": model.training,
+        "model_state": _cpu_snapshot(model_state),
+        "optimizer_type": "AdamW",
+        "optimizer_state": _cpu_snapshot(optimizer_state),
+    }
+    _validate_optimizer_state(payload["optimizer_state"], parameters)
+    return payload
+
+
+def _atomic_save(payload: dict, path: str | Path) -> None:
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False
+        ) as temporary:
+            temporary_path = Path(temporary.name)
+            torch.save(payload, temporary)
+            temporary.flush()
+            os.fsync(temporary.fileno())
+        os.replace(temporary_path, path)
+    finally:
+        if temporary_path is not None:
+            temporary_path.unlink(missing_ok=True)
+
+
+def _restore_model(payload: dict, device: torch.device) -> MultimodalLoopTransformer:
+    """Reconstruct on CPU without consuming RNG; caller transfers and restores RNG last."""
+    backend = device.type
     if backend != "cpu":
         if payload["model_dtype"] != "float32":
             raise ValueError("accelerator checkpoint model_dtype must be float32")
@@ -341,34 +391,4 @@ def load_checkpoint(path: str | Path, *, device: str | torch.device = "cpu") -> 
         model.load_state_dict(payload["model_state"], strict=True)
         model.train(payload["model_training"])
         _validate_optimizer_state(payload["optimizer_state"], list(model.parameters()))
-        _validate_training_state(
-            model,
-            payload["input_ids"],
-            payload["images"],
-            payload["completed_steps"],
-            payload["question_length"],
-            payload["recurrence_depth"],
-            payload["seed"],
-        )
-    # Transfer parameters before constructing the optimizer: Module.to may
-    # replace Parameter objects on XLA. load_state_dict places moments on their
-    # parameters and retains CPU step counters for non-capturable AdamW.
-    with preserve_device_rng(device):
-        model.to(device)
-        optimizer = AdamW(model.parameters())
-        optimizer.load_state_dict(payload["optimizer_state"])
-        input_ids = payload["input_ids"].to(device)
-        images = None if payload["images"] is None else payload["images"].to(device)
-        finish_step(device)
-    result = LoadedCheckpoint(
-        model=model,
-        optimizer=optimizer,
-        completed_steps=payload["completed_steps"],
-        input_ids=input_ids,
-        images=images,
-        question_length=payload["question_length"],
-        recurrence_depth=payload["recurrence_depth"],
-        seed=payload["seed"],
-    )
-    _restore_rng(payload["rng_state"], device, payload.get("device_rng_state"))
-    return result
+    return model
