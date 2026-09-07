@@ -1095,10 +1095,15 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 0 — infrastructure and correctness, officially complete.
+**Phase:** Milestone 1 — Synthetic vision, in progress: learn meaningful visual
+grounding from random initialization without a pretrained vision encoder.
 
-**Next:** Milestone 1 — Synthetic vision: learn meaningful visual grounding from
-random initialization without a pretrained vision encoder.
+**Milestone 0:** Infrastructure and correctness, officially complete.
+
+The first Milestone 1 data increment implements deterministic single-object color
+questions, disjoint layout splits, and a manifest/visual preview. Tokenization,
+batching, training on these scenes, and held-out grounding measurements follow
+separately; no learned visual-grounding result is claimed yet.
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1562,6 +1567,86 @@ using Kaggle's Save Version workflow before the session ends. In a later session
 attach that output, pass its checkpoint path under `/kaggle/input/...` to
 `--resume`, and save the continued run to a new `/kaggle/working/checkpoints/...`
 path. Keep the backend and runtime environment consistent when resuming.
+
+## Deterministic single-object color questions
+
+The first synthetic corpus asks **"What color is the object?"** about exactly one
+square, circle, or upright triangle. Answers are red, green, blue, or yellow.
+Images use a black background and saturated RGB colors (yellow is red + green),
+with hard edges and no antialiasing. This is a basic color-perception task;
+spatial reasoning and recurrence benefits are later research questions.
+
+`SyntheticShapesConfig` defaults to 32×32 images, object bounding-box sizes
+`(8, 12, 16)`, seed 0, and 1,024 training / 256 validation / 256 test examples.
+Object sizes must be distinct even integers of at least four pixels, fitting
+with a one-pixel canvas margin. Rendering samples pixel centers: squares fill
+their bounding boxes, circles are inscribed, and triangles have a top-center
+apex and bottom-edge base. Boundary pixels are included when their centers lie
+on the shape. Even-sized triangles may leave the top bounding-box row empty.
+All rendered tensors are fresh CPU `float32 [3,H,W]` values in `[0,1]`, independent
+of PyTorch's default device and dtype.
+
+A layout is `(shape, size, left, top)`. The generator enumerates shape order
+`square, circle, triangle`, configured size order, then top and left coordinates,
+and shuffles that catalog with a local `random.Random(seed)`. It allocates layouts
+without replacement to train, validation, then test. Every allocated layout
+appears in all four colors in its own split; labels are therefore balanced even
+conditional on shape, size, and position. No shape or color category is reserved
+for a held-out split. Very small splits may not sample every shape.
+
+Split sizes count images and must be positive multiples of four. The default
+catalog contains 3,345 layouts / 13,380 colored scenes. Requests exceeding the
+finite capacity fail. Layout identities and exact rendered images are disjoint
+across splits, while individual attributes such as color and size can recur.
+This tests unseen layout combinations, not unseen attribute categories.
+
+Within each split, examples are shuffled with a separate local RNG seeded by
+`f"{seed}:{split}"`. The same configuration and generator/software version
+reproduce ordered scenes and pixels without consuming global Python, NumPy, or
+PyTorch RNG state. Changing split sizes or size order can change split membership.
+Persist the manifest for an experiment instead of regenerating its splits with
+modified settings. Data format/generator version 1 describes these rules.
+
+```python
+from multimodal_loop.data.synthetic_shapes import (
+    SyntheticShapesConfig,
+    build_scene_splits,
+    make_example,
+)
+
+config = SyntheticShapesConfig()
+scenes = build_scene_splits(config)
+example = make_example(scenes["train"][0], image_size=config.image_size)
+assert example.image.shape == (3, 32, 32)
+print(example.question, example.answer, example.scene)
+```
+
+`ShapeScene` and the configuration are frozen dataclasses. `build_scene_splits`
+returns a dictionary of immutable scene tuples. `render_scene(scene,
+image_size=32)` renders one scene; `make_example` adds the fixed question,
+one-word answer, and scene metadata. Image tensors remain mutable, but repeated
+calls allocate independent storage. Scene metadata and manifest answers are
+supervision/inspection information; future model inputs must contain only images
+and question tokens (plus appropriately masked answer inputs during training).
+
+Generate the default corpus manifest and inspectable preview from the repo root:
+
+```bash
+python scripts/generate_synthetic_data.py --output-dir outputs/synthetic_shapes
+```
+
+The script prints answer frequencies and writes `manifest.json` (format version,
+configuration, software versions, and ordered scene/question/answer records) plus
+`preview.html` (up to 12 examples from each split). Open the HTML in a browser.
+It is self-contained and displays horizontal runs of actual raster pixels as
+inline SVG, together with questions, answers, and scene metadata. Images are
+regenerated from scene descriptions; the manifest does not store image arrays.
+No external renderer or new dependency is needed. Reruns replace these two files
+in the selected output directory.
+
+Use `--seed`, `--image-size`, `--object-sizes 8 12 16`, `--train-size`,
+`--validation-size`, `--test-size`, and `--preview-count` to select another valid
+configuration. This command does not tokenize examples or train a model.
 
 Immediate objective — Milestone 1:
 

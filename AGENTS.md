@@ -6,7 +6,7 @@ This repository implements an experimental **multimodal recurrent-depth transfor
 
 Read `README.md` before making architectural changes. It describes the research goals, hypotheses, milestones, and intended repository structure.
 
-The current priority is **Milestone 0: infrastructure and correctness**.
+The current priority is **Milestone 1: synthetic vision and visual grounding**.
 
 Do not prematurely optimize for large-scale training.
 
@@ -287,7 +287,7 @@ Masking behavior must be covered by unit tests.
 
 ## Training
 
-Milestone 0 prioritizes correctness over speed.
+Early synthetic-vision training prioritizes correctness over speed.
 
 Initially prefer:
 
@@ -322,7 +322,15 @@ Do not duplicate large sections of `README.md` inside this file.
 
 ## Current Milestone
 
-Milestone 0 is complete only when:
+Milestone 0 is complete, including CPU correctness and Kaggle single-device CUDA
+validation. TPU hardware validation is deferred.
+
+Milestone 1 begins with deterministic single-object color questions, independently
+tested rendering and labels, and disjoint training/validation/test layouts.
+Scene metadata is for supervision and inspection, never model input. Establish
+held-out visual grounding before investigating recurrence benefits in Milestone 2.
+
+Preserve the infrastructure baseline:
 
 * the package installs successfully
 * imports work
@@ -334,5 +342,5 @@ Milestone 0 is complete only when:
 * checkpoints save and load
 * tests pass reliably
 
-Prefer completing these foundations before beginning synthetic reasoning experiments.
+Keep new research increments small and preserve these foundations as the data and training paths grow.
 
