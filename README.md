@@ -2192,5 +2192,3 @@ Scale comes later.
 
 First, build and measure useful capabilities. Investigate where recurrence helps
 alongside that progress.
-# multi-modal-loop-llm
-Multi-Modal Loop LLM experiment
