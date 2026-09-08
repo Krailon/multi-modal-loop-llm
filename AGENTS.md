@@ -352,9 +352,10 @@ verified labels. Establish held-out learning at a fixed recurrence depth, with
 image controls and same-image/different-question examples requiring different
 answers. Both the image and question must affect answers appropriately.
 
-Specify dataset details and numerical acceptance criteria in the next small
-planning increment. Recurrence comparisons may follow, but an advantage is not
-a milestone completion gate. Later research priorities can evolve with capability
+The first baseline budget and validation gates are fixed in
+[the Milestone 2 protocol](docs/milestones/milestone2.md). Preserve them when
+running or assessing that experiment. Recurrence comparisons may follow, but an
+advantage is not a milestone completion gate. Later research priorities can evolve with capability
 needs; preserve simple baselines and explicit computational budgets.
 Scene metadata remains supervision/inspection information, never model input.
 Do not infer a recurrence advantage from the Milestone 1 fixed-depth result.
@@ -372,4 +373,3 @@ Preserve the infrastructure baseline:
 * tests pass reliably
 
 Keep new research increments small and preserve these foundations as the data and training paths grow.
-

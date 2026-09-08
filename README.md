@@ -1022,8 +1022,8 @@ Success criterion:
 Use image controls and same-image/different-question examples that require
 different answers. This tests question dependence as well as image dependence.
 The deterministic corpus and fixed-depth training/control infrastructure are
-implemented. Choose the first research run budget and numerical acceptance
-thresholds before baseline training.
+implemented. The [first baseline protocol](docs/milestones/milestone2.md) fixes
+the training budget and validation acceptance gates; the Kaggle experiment is pending.
 
 Recurrence comparisons can follow as research. Demonstrating an advantage from
 additional recurrent steps is not required to complete this capability milestone.
@@ -2177,10 +2177,9 @@ accuracy, and different-answer-pair accuracy: always predicting the middle color
 can reach 50% overall while scoring zero on both grouped metrics.
 
 See [relational training, checkpoint, and control usage](docs/relational_training.md)
-for commands, defaults, artifact formats, and interpretation. This increment
-implements and tests infrastructure; the research baseline and numerical
-acceptance thresholds remain to be selected. Future experiment results belong
-in `docs/milestones/milestone2.md`.
+for Kaggle commands, artifact formats, and interpretation. The
+[Milestone 2 protocol and future results](docs/milestones/milestone2.md) record
+the agreed 10-epoch, R=2 baseline and validation gates. Research training is pending.
 
 Immediate objective — Milestone 2 preparation:
 

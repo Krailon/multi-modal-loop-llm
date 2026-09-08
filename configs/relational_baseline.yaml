@@ -1,0 +1,15 @@
+# Milestone 2 fixed-depth baseline; training settings are in the recorded protocol.
+vocab_size: 17
+max_seq_len: 128
+d_model: 64
+n_heads: 4
+d_ff: 256
+n_prelude_layers: 1
+n_recurrent_layers: 1
+n_coda_layers: 1
+recurrence_depth: 2
+image_size: 32
+patch_size: 8
+num_channels: 3
+dropout: 0.0
+layer_norm_eps: 1.0e-5

@@ -2,26 +2,117 @@
 
 The Milestone 2 training path supports the validated three-object relational
 corpus, fixed recurrence depth, epoch-boundary checkpoints, and frozen-model
-image/question controls. This infrastructure has correctness tests; a research
-baseline run and numerical acceptance thresholds remain the next step. Future
-experiment results belong in `docs/milestones/milestone2.md`.
+image/question controls. The [first baseline protocol](milestones/milestone2.md)
+is fixed at **10 epochs, R=2**, with validation acceptance gates recorded before
+training. The experiment is pending; results will be recorded with that protocol.
 
-## Train and resume
+## Kaggle baseline
 
-Generate the corpus with `scripts/generate_relational_data.py` first if needed.
-The following commands illustrate usage; the epoch count is a CLI example,
-not a selected research budget:
+Run these shell commands from the repository root with the package installed in
+an environment that already provides CUDA PyTorch. Use a Bash notebook cell
+(`%%bash`) or a shell; retain the existing accelerator-specific Torch installation.
+Training and evaluation select one GPU, `cuda:0`. The explicit YAML is model configuration;
+training settings are supplied separately on the command line.
+
+After the separate smoke check below succeeds, generate the research corpus once
+in a fresh directory. Keep this manifest for the entire run and its controls:
+
+```bash
+python scripts/generate_relational_data.py \
+  --image-size 32 --object-sizes 6 8 --seed 0 \
+  --train-geometry-count 16 --validation-geometry-count 4 --test-geometry-count 4 \
+  --output-dir /kaggle/working/milestone2_baseline/data
+
+mkdir -p /kaggle/working/milestone2_baseline/provenance
+git rev-parse HEAD > /kaggle/working/milestone2_baseline/provenance/revision.txt
+git status --short > /kaggle/working/milestone2_baseline/provenance/worktree.txt
+cp configs/relational_baseline.yaml /kaggle/working/milestone2_baseline/provenance/model.yaml
+
+python scripts/train_relational.py \
+  --manifest /kaggle/working/milestone2_baseline/data/manifest.json \
+  --model-config configs/relational_baseline.yaml \
+  --epochs 10 --batch-size 32 --recurrence-depth 2 \
+  --learning-rate 0.001 --weight-decay 0 --seed 0 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_baseline/training
+```
+
+Use a committed revision containing the protocol and configuration. Retain the
+console output alongside artifacts; if the tracked worktree has local changes,
+record the actual diff as well so that the revision does not misidentify the code.
+The script prints runtime details and the manifest hash, also saved in settings.
+
+### Resume an interrupted baseline
+
+Read `completed_epochs` from the checkpoint before resuming. This read does not
+construct a model or restore random streams:
+
+```bash
+python - <<'PYRESUME'
+import torch
+
+checkpoint = torch.load(
+    "/kaggle/working/milestone2_baseline/training/last.pt",
+    map_location="cpu", weights_only=True,
+)
+completed = checkpoint["completed_epochs"]
+print(f"Completed epochs: {completed}; remaining budget: {10 - completed}")
+PYRESUME
+```
+
+For example, **only if four epochs are complete**, run the following six additional
+epochs. Replace `6` with `10 - completed_epochs` for your checkpoint. If ten epochs
+are already complete, proceed directly to validation controls. A checkpoint beyond
+ten epochs is not the agreed baseline endpoint.
 
 ```bash
 python scripts/train_relational.py \
-  --manifest outputs/relational_shapes/manifest.json \
-  --epochs 1 --recurrence-depth 2 \
-  --output-dir outputs/relational_training
+  --resume /kaggle/working/milestone2_baseline/training/last.pt \
+  --epochs 6 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_baseline/training
+```
+
+Resume only at epoch boundaries on the saved backend. For a checkpoint restored
+from a previous session, use its actual path for `--resume` and a writable output
+directory; embedded settings, manifest, and history are authoritative. Retain the
+entire run directory outside the transient session, including the source manifest
+and provenance files. Never resume the research baseline from a smoke checkpoint.
+
+### Separate CUDA smoke check
+
+This exercises training, checkpoint resume, and controls on a smaller corpus.
+It establishes successful execution, not an accuracy target or research result.
+Run it once before the fresh baseline; do not tune settings using its metrics.
+
+```bash
+python scripts/generate_relational_data.py \
+  --image-size 32 --object-sizes 6 8 --seed 1 --preview-count 1 \
+  --train-geometry-count 1 --validation-geometry-count 1 --test-geometry-count 1 \
+  --output-dir /kaggle/working/milestone2_smoke/data
 
 python scripts/train_relational.py \
-  --resume outputs/relational_training/last.pt \
-  --epochs 1 --output-dir outputs/relational_training
+  --manifest /kaggle/working/milestone2_smoke/data/manifest.json \
+  --model-config configs/relational_baseline.yaml \
+  --epochs 1 --batch-size 32 --recurrence-depth 2 \
+  --learning-rate 0.001 --weight-decay 0 --seed 1 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_smoke/training
+
+python scripts/train_relational.py \
+  --resume /kaggle/working/milestone2_smoke/training/last.pt \
+  --epochs 1 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_smoke/training
+
+python scripts/evaluate_relational.py \
+  --checkpoint /kaggle/working/milestone2_smoke/training/last.pt \
+  --split validation --batch-size 32 --shuffle-seeds 0 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_smoke/validation
 ```
+
+Confirm finite losses, completion at epoch 2 / 36 optimizer steps, and a controls
+report covering 576 QA examples. Failure here calls for a hardware/runtime
+investigation before the research run. The research baseline still starts from
+scratch with seed 0 and the full 16/4/4 corpus.
+
+## Training behavior and artifacts
 
 Fresh runs initialize the model from scratch. Defaults are vocabulary size 17,
 image size from the manifest, and the remaining `ModelConfig` defaults: width 64,
@@ -36,7 +127,8 @@ Training overrides are `--batch-size`, `--learning-rate`, `--weight-decay`,
 the model configuration's default depth. Both training and validation use that
 saved training depth. `--epochs` defaults to 10 and always means additional
 complete epochs in this invocation; no early stopping or best-checkpoint
-selection occurs. Agree on the research budget before running the baseline.
+selection occurs. The agreed baseline uses ten total epochs, including any
+completed epochs before a resume.
 At the default corpus size, one epoch visits **9,216 QA examples** and performs
 **288 optimizer steps** with batch size 32.
 
@@ -76,8 +168,9 @@ apply; exact CPU continuation with dropout is tested across process restarts.
 
 ```bash
 python scripts/evaluate_relational.py \
-  --checkpoint outputs/relational_training/last.pt \
-  --split validation --output-dir outputs/relational_controls
+  --checkpoint /kaggle/working/milestone2_baseline/training/last.pt \
+  --split validation --batch-size 32 --shuffle-seeds 0 1 2 3 4 --device cuda:0 \
+  --output-dir /kaggle/working/milestone2_baseline/validation
 ```
 
 The default split is validation, batch size comes from the checkpoint, and shuffle
@@ -85,7 +178,11 @@ seeds default to `0 1 2 3 4`. Evaluation accepts `--batch-size`, `--shuffle-seed
 and `--device`; recurrence depth is locked to the saved training setting.
 `--split test` is available for the later explicitly authorized frozen-checkpoint
 evaluation. Training never evaluates the test split. No research test evaluation
-is part of this infrastructure increment.
+is part of the first baseline run. Apply the
+[recorded validation gates](milestones/milestone2.md#validation-acceptance-gates)
+to the unrounded JSON metrics from the epoch-10 checkpoint. All gates must pass
+before advancing to the later frozen-test step; a miss is recorded without
+automatic extra training or changes to the thresholds.
 
 The evaluator writes `controls.json` and refuses to overwrite an existing report.
 It records checkpoint/manifest hashes, progress, model/training/evaluation settings,
