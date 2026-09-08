@@ -1,4 +1,4 @@
-"""Fixed version-1 vocabulary for the initial synthetic color task."""
+"""Fixed task vocabularies for single-object and relational color questions."""
 
 from multimodal_loop.data.synthetic_shapes import COLORS, QUESTION
 
@@ -37,3 +37,52 @@ class ColorQuestionTokenizer:
         if not self.question_length <= token_id < self.vocab_size:
             raise ValueError("answer token ID must be in [6, 10)")
         return self.vocabulary[token_id]
+
+
+class RelationalColorTokenizer:
+    """Version-1 relational vocabulary; preserve all original color-task IDs.
+
+    Only six canonical relational question strings are supported. Questions
+    contain 11 tokens, including two occurrences of 'the'. Answer IDs remain
+    6..9 and must not be inferred from question length or total vocabulary size.
+    """
+
+    version = 1
+    vocabulary = ColorQuestionTokenizer.vocabulary + (
+        "immediately",
+        "left",
+        "right",
+        "of",
+        "square",
+        "circle",
+        "triangle",
+    )
+    vocab_size = len(vocabulary)
+    question_length = 11
+
+    def encode_question(self, question: str) -> tuple[int, ...]:
+        if not isinstance(question, str):
+            raise TypeError("question must be a string")
+        for shape in ("square", "circle", "triangle"):
+            for direction in ("left", "right"):
+                if question == f"What color is the object immediately {direction} of the {shape}?":
+                    return (
+                        0,
+                        1,
+                        2,
+                        3,
+                        4,
+                        10,
+                        self.vocabulary.index(direction),
+                        13,
+                        3,
+                        self.vocabulary.index(shape),
+                        5,
+                    )
+        raise ValueError("unsupported relational color question")
+
+    def encode_answer(self, answer: str) -> int:
+        return ColorQuestionTokenizer().encode_answer(answer)
+
+    def decode_answer(self, token_id: int) -> str:
+        return ColorQuestionTokenizer().decode_answer(token_id)

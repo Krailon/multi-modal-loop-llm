@@ -2000,9 +2000,10 @@ its tensor remains mutable and independently allocated for each example. Scene
 and query metadata are supervision/inspection information, never model inputs.
 
 These helpers establish geometry and answer semantics. The corpus generator below
-adds balancing and split separation. Relational tokenization, batching, and training
-remain future increments; the Milestone 1 tokenizer/collator still supports only
-its original fixed question. Existing formats and recorded experiments remain unchanged.
+adds balancing and split separation, and the loading/batching path below prepares
+relational examples for model input. Dataset training and evaluation integration
+remain future increments. The Milestone 1 tokenizer/collator still supports only
+its original fixed question; existing formats and experiments remain unchanged.
 
 ## Balanced relational corpus generation
 
@@ -2075,8 +2076,96 @@ Use `--image-size`, `--object-sizes`, `--seed`, `--train-geometry-count`,
 `--validation-geometry-count`, and `--test-geometry-count` to configure another
 valid corpus. All three geometry counts must be positive integers. Object sizes
 must be distinct even integers of at least four, fitting the canvas individually;
-the total request must fit the feasible three-object catalog. No corpus loader,
-relational tokenizer, batching path, or model training is introduced by this command.
+the total request must fit the feasible three-object catalog. This command writes
+metadata and previews only; use the separate loading/batching interfaces below to
+prepare tensors. It does not train or evaluate a model.
+
+## Loading and batching relational examples
+
+`load_relational_manifest(path)` and `parse_relational_manifest(content)` in
+`multimodal_loop.data.relational_dataset` validate the stored corpus without
+rendering or regenerating it from the seed. Validation covers kind/version,
+configuration, image size, canonical spatial object order, scene geometry,
+configured object sizes, distinct shapes/colors, and all four valid queries with
+exact question text and resolved answers. Every geometry must retain all six
+shape orders and 24 color assignments, with no duplicate variants or geometry
+overlap between splits. Both image-record and question order are preserved as
+stored. The frozen `RelationalManifest` retains immutable grouped records, exact
+UTF-8 content, and its SHA256; loading does not consume global randomness.
+
+`RelationalColorDataset(manifest, split)` flattens images then their stored
+questions: index `i` selects image `i // 4` and question `i % 4`. Default lengths
+are 9,216 training and 2,304 per held-out split. `.records` retains the grouped
+records for future paired-question evaluation. Each access renders fresh CPU
+float32 pixels without caching and returns the stored text and explicit answer
+along with scene/query metadata. Negative indices follow ordinary sequence
+semantics; indices outside the dataset raise `IndexError`.
+
+`RelationalColorTokenizer` is a separate version-1 task tokenizer. It preserves
+Milestone 1 IDs 0–9 and appends:
+
+| ID | Token | ID | Token |
+| --- | --- | --- | --- |
+| 10 | immediately | 14 | square |
+| 11 | left | 15 | circle |
+| 12 | right | 16 | triangle |
+| 13 | of | | |
+
+Only the six exact relational question strings are accepted. Questions have
+**11 tokens**, including two occurrences of `the`. Answers still use IDs **6–9**;
+answer-ID validity is independent of question length. Other answer predictions
+are rejected by `decode_answer`. There is no normalization, fitting, padding,
+or special-token insertion. For example:
+
+```text
+What color is the object immediately left of the square ?
+   0     1  2   3      4          10   11 13   3     14 5
+```
+
+`RelationalColorCollator(ModelConfig)` reads only `image`, `question`, and explicit
+`answer`, never scene/query metadata. It returns the existing `ColorQuestionBatch`
+with images `[B,3,H,W]`, int64 IDs `[B,12]`, a boolean target mask selecting only the
+last answer, and a shared prefix-attention mask. With P image patches, the first
+P+11 positions are bidirectional and cannot attend to the answer input. The logit
+at position **P+10** predicts the answer; the final answer input has no supervised
+successor. The model requires three channels, vocabulary size at least 17, and
+capacity for P+12 positions. Use vocabulary size 17 for the initial relational task.
+
+```python
+from multimodal_loop.data.collator import RelationalColorCollator
+from multimodal_loop.data.relational_dataset import (
+    RelationalColorDataset,
+    load_relational_manifest,
+)
+from multimodal_loop.data.text import RelationalColorTokenizer
+from multimodal_loop.model.config import ModelConfig
+
+manifest = load_relational_manifest("outputs/relational_shapes/manifest.json")
+dataset = RelationalColorDataset(manifest, "train")
+config = ModelConfig(
+    vocab_size=RelationalColorTokenizer.vocab_size,
+    image_size=manifest.config.image_size,
+)
+batch = RelationalColorCollator(config)([dataset[i] for i in range(4)])
+assert batch.input_ids.shape == (4, 12)
+assert batch.question_length == 11
+# These four questions share identical image pixels.
+assert batch.images[0].equal(batch.images[3])
+```
+
+Use `batch.model_inputs()` for the forward arguments, `.to(device)` to transfer
+tensors together, and `shifted_cross_entropy` with `batch.num_image_tokens` and
+`batch.target_mask` for answer-only loss. Question-only forward passes use the
+first 11 IDs, an all-prefix mask of size P+11, and the final logit. Tests compare
+these predictions to the answer-supervised sequence at multiple recurrent depths
+and verify isolation from changed answer inputs and successful gradient flow.
+
+The shared batch helpers preserve Milestone 1 behavior. The existing synthetic
+training/evaluation CLIs, dataset checkpoint format, and control evaluator remain
+specific to the original six-token color question. They are not yet relational
+training/evaluation entry points. A shared tokenizer version number or shared
+color IDs does not make the two task checkpoints interchangeable. No research
+model is trained or evaluated as part of this loading/batching increment.
 
 Immediate objective — Milestone 2 preparation:
 
