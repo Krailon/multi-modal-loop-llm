@@ -1021,8 +1021,9 @@ Success criterion:
 
 Use image controls and same-image/different-question examples that require
 different answers. This tests question dependence as well as image dependence.
-Detailed dataset design and numerical acceptance thresholds belong to the next
-small implementation-planning increment.
+The deterministic corpus and fixed-depth training/control infrastructure are
+implemented. Choose the first research run budget and numerical acceptance
+thresholds before baseline training.
 
 Recurrence comparisons can follow as research. Demonstrating an advantage from
 additional recurrent steps is not required to complete this capability milestone.
@@ -2001,8 +2002,8 @@ and query metadata are supervision/inspection information, never model inputs.
 
 These helpers establish geometry and answer semantics. The corpus generator below
 adds balancing and split separation, and the loading/batching path below prepares
-relational examples for model input. Dataset training and evaluation integration
-remain future increments. The Milestone 1 tokenizer/collator still supports only
+relational examples for model input. The relational training and evaluation path
+is documented below. The Milestone 1 tokenizer/collator still supports only
 its original fixed question; existing formats and experiments remain unchanged.
 
 ## Balanced relational corpus generation
@@ -2162,10 +2163,24 @@ and verify isolation from changed answer inputs and successful gradient flow.
 
 The shared batch helpers preserve Milestone 1 behavior. The existing synthetic
 training/evaluation CLIs, dataset checkpoint format, and control evaluator remain
-specific to the original six-token color question. They are not yet relational
-training/evaluation entry points. A shared tokenizer version number or shared
-color IDs does not make the two task checkpoints interchangeable. No research
-model is trained or evaluated as part of this loading/batching increment.
+specific to the original six-token color question. The relational task uses
+separate entry points and a distinct checkpoint kind. A shared tokenizer version
+number or shared color IDs does not make the two task checkpoints interchangeable.
+
+## Fixed-depth relational training and controls
+
+`scripts/train_relational.py` trains manifest-backed relational QA examples with
+answer-only loss and epoch-boundary resume. `scripts/evaluate_relational.py`
+evaluates a frozen checkpoint with correct, blank, and shuffled images, plus
+within-image shuffled questions. Reports include per-question accuracy, all-four
+accuracy, and different-answer-pair accuracy: always predicting the middle color
+can reach 50% overall while scoring zero on both grouped metrics.
+
+See [relational training, checkpoint, and control usage](docs/relational_training.md)
+for commands, defaults, artifact formats, and interpretation. This increment
+implements and tests infrastructure; the research baseline and numerical
+acceptance thresholds remain to be selected. Future experiment results belong
+in `docs/milestones/milestone2.md`.
 
 Immediate objective — Milestone 2 preparation:
 
