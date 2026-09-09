@@ -2169,6 +2169,11 @@ number or shared color IDs does not make the two task checkpoints interchangeabl
 
 ## Fixed-depth relational training and controls
 
+Import the [CUDA smoke notebook](notebooks/kaggle_relational_smoke.ipynb), then the
+[Milestone 2 baseline notebook](notebooks/kaggle_milestone2_baseline.ipynb), into
+Kaggle from GitHub. They provide setup, training/resume, validation controls, and
+artifact downloads. See [notebook import and usage](docs/relational_training.md#importable-notebooks).
+
 `scripts/train_relational.py` trains manifest-backed relational QA examples with
 answer-only loss and epoch-boundary resume. `scripts/evaluate_relational.py`
 evaluates a frozen checkpoint with correct, blank, and shuffled images, plus

@@ -6,6 +6,57 @@ image/question controls. The [first baseline protocol](milestones/milestone2.md)
 is fixed at **10 epochs, R=2**, with validation acceptance gates recorded before
 training. The experiment is pending; results will be recorded with that protocol.
 
+## Importable notebooks
+
+The repository includes two unexecuted notebooks:
+
+| Notebook | Purpose |
+| --- | --- |
+| [CUDA smoke check](../notebooks/kaggle_relational_smoke.ipynb) | Small-corpus training, resume, and validation controls; run this first. |
+| [Milestone 2 baseline](../notebooks/kaggle_milestone2_baseline.ipynb) | Fixed ten-epoch run or continuation, full validation controls, and the recorded acceptance gates. |
+
+Commit and push the notebook and package changes to GitHub before importing them.
+Kaggle supports notebook imports from GitHub and external URLs; see its
+[import announcement](https://www.kaggle.com/product-announcements/572642).
+Use these URLs in Kaggle's notebook import workflow once the files are pushed:
+
+- [Smoke notebook on GitHub](https://github.com/Krailon/multi-modal-loop-llm/blob/milestone2/notebooks/kaggle_relational_smoke.ipynb)
+- [Baseline notebook on GitHub](https://github.com/Krailon/multi-modal-loop-llm/blob/milestone2/notebooks/kaggle_milestone2_baseline.ipynb)
+
+The links and notebook `REPO_REF` initially use `milestone2`. If running after a
+branch rename/removal, use the appropriate branch or exact commit in both the
+import URL and settings. The notebook import and its cloned package code should
+come from the same revision. For a recorded run, retain the resolved commit.
+
+Enable a GPU and internet access, review the first settings cell, then run cells
+in order or use Run All. Setup clones the requested revision, installs the package
+without its Torch extra, and checks CUDA. An existing checkout must be clean and
+match the requested revision; it is never silently switched to a newer branch
+tip. The notebooks call the existing scripts through
+`multimodal_loop.train.kaggle`, which streams subprocess output and saves logs.
+`multimodal_loop.eval.relational_protocol` validates report provenance/counts and
+applies the six documented gates. No model or training logic is duplicated in
+notebook cells.
+
+Use a fresh smoke output directory each time. Start the baseline from scratch
+after the smoke check passes. The baseline automatically resumes a local
+`training/last.pt` for only the remaining epochs, or skips training at epoch ten.
+It rejects incompatible settings and checkpoints beyond the agreed budget.
+To continue from a previous session, set `RESUME_CHECKPOINT` to the restored
+checkpoint and use a fresh `RUN_ROOT`. Pin `REPO_REF` to the original code commit
+and preserve the original archive and provenance too.
+
+Existing validation reports are reused only when checkpoint/manifest hashes,
+settings, progress, counts, and shuffle summaries agree. The gate assessment is
+saved in `validation/acceptance.json`; failure never triggers additional training.
+The final cell creates an artifact ZIP outside the run directory and displays a
+download link. Retain that archive (also available among notebook output files)
+before the session ends. No notebook evaluates the research test split.
+
+Notebook structure, Python cells, orchestration, and gate calculations are tested
+locally with mocked script calls. Actual notebook execution on Kaggle GPU remains
+the hardware check; the notebooks contain no precomputed experimental outputs.
+
 ## Kaggle baseline
 
 Run these shell commands from the repository root with the package installed in
