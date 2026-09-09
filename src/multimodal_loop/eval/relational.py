@@ -26,6 +26,7 @@ def _predict_relational(
     batches: Iterable[ColorQuestionBatch],
     *,
     recurrence_depth: int,
+    details: list[dict] | None = None,
 ) -> tuple[EvaluationMetrics, list[int]]:
     """Preserve modes and random streams, including on failed evaluation."""
     _integer("recurrence_depth", recurrence_depth, 1)
@@ -63,6 +64,11 @@ def _predict_relational(
                     matches = (predicted == targets).sum()
                     # Color IDs did not move when relational question tokens were appended.
                     bad = ((predicted < 6) | (predicted >= 10)).sum()
+                    if details is not None:
+                        individual_loss = F.cross_entropy(logits, targets, reduction="none")
+                        probabilities = logits.softmax(dim=-1)
+                        confidence = probabilities.gather(1, predicted[:, None]).squeeze(1)
+                        target_probability = probabilities.gather(1, targets[:, None]).squeeze(1)
                     finish_step(device)
                     loss_value = loss.item()
                     if not isfinite(loss_value):
@@ -72,6 +78,30 @@ def _predict_relational(
                     invalid += bad.item()
                     total += targets.shape[0]
                     predictions.extend(predicted.cpu().tolist())
+                    if details is not None:
+                        details.extend(
+                            dict(
+                                zip(
+                                    (
+                                        "prediction_id",
+                                        "target_id",
+                                        "loss",
+                                        "confidence",
+                                        "target_probability",
+                                    ),
+                                    values,
+                                    strict=True,
+                                )
+                            )
+                            for values in zip(
+                                predicted.cpu().tolist(),
+                                targets.cpu().tolist(),
+                                individual_loss.cpu().tolist(),
+                                confidence.cpu().tolist(),
+                                target_probability.cpu().tolist(),
+                                strict=True,
+                            )
+                        )
             finally:
                 finish_step(device)
     finally:

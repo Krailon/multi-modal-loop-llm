@@ -219,7 +219,12 @@ def prepare_run(
 
 def run_command(run: NotebookRun, name: str, arguments: list[str]) -> None:
     """Stream a checked subprocess to the cell and a unique persistent log."""
-    log = run.root / "logs" / f"{name}-{uuid.uuid4().hex}.log"
+    run_logged_command(run.repo, run.root, name, arguments)
+
+
+def run_logged_command(repo: Path, root: Path, name: str, arguments: list[str]) -> None:
+    """Shared checked logging for training and read-only diagnostic notebooks."""
+    log = root / "logs" / f"{name}-{uuid.uuid4().hex}.log"
     log.parent.mkdir(parents=True, exist_ok=True)
     command = [sys.executable, *map(str, arguments)]
     print(f"Running: {command}\nLog: {log}", flush=True)
@@ -227,7 +232,7 @@ def run_command(run: NotebookRun, name: str, arguments: list[str]) -> None:
         handle.write(_json({"command": command}))
         with subprocess.Popen(
             command,
-            cwd=run.repo,
+            cwd=repo,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,

@@ -1023,7 +1023,8 @@ Use image controls and same-image/different-question examples that require
 different answers. This tests question dependence as well as image dependence.
 The deterministic corpus and fixed-depth training/control infrastructure are
 implemented. The [first baseline protocol](docs/milestones/milestone2.md) fixes
-the training budget and validation acceptance gates; the Kaggle experiment is pending.
+the training budget and validation acceptance gates. The first Kaggle baseline
+completed but missed four gates; frozen-model diagnosis is next.
 
 Recurrence comparisons can follow as research. Demonstrating an advantage from
 additional recurrent steps is not required to complete this capability milestone.
@@ -1148,8 +1149,8 @@ These projects provide useful reference implementations and experimental precede
 
 # Status
 
-**Phase:** Milestone 2 preparation — question-dependent visual reasoning through
-multi-object scenes and varied relational questions, first at fixed recurrence depth.
+**Phase:** Milestone 2 in progress — the fixed-depth relational baseline has been
+evaluated on Kaggle; frozen-model training/validation diagnosis is next.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
@@ -2184,13 +2185,15 @@ can reach 50% overall while scoring zero on both grouped metrics.
 See [relational training, checkpoint, and control usage](docs/relational_training.md)
 for Kaggle commands, artifact formats, and interpretation. The
 [Milestone 2 protocol and future results](docs/milestones/milestone2.md) record
-the agreed 10-epoch, R=2 baseline and validation gates. Research training is pending.
+the agreed 10-epoch, R=2 baseline, its results, and validation gates. The first
+baseline passed two of six gates; use the
+[frozen-model diagnostic notebook](notebooks/kaggle_milestone2_diagnostics.ipynb)
+next to investigate training and validation errors.
 
-Immediate objective — Milestone 2 preparation:
+Immediate objective — Milestone 2 diagnosis:
 
-> Establish deterministic multi-object scenes and varied one-hop relational questions,
-> then verify held-out learning at fixed recurrence depth with controls for image
-> and question dependence.
+> Diagnose the frozen baseline's training and validation errors before choosing
+> the next capability experiment. Preserve the original baseline and reserved test split.
 
 Scale comes later.
 

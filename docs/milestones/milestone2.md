@@ -2,12 +2,12 @@
 
 ## Status
 
-**Protocol fixed; experiment pending.**
+**First baseline complete; validation gates not met. Frozen-model diagnosis pending.**
 
-The first baseline budget and validation gates were agreed before research
-training. The relational training, checkpoint, and control infrastructure has CPU
-correctness coverage. Relational CUDA validation and the research run remain to
-be performed by the user on Kaggle. No research results are recorded here yet.
+The original budget and thresholds below were agreed before training and remain
+unchanged. The baseline completed on Kaggle CUDA and passed two of six validation
+gates. Its results and artifact audit are recorded below. The reserved test split
+has not been evaluated as part of this baseline.
 
 The capability question is whether a model trained from scratch can answer varied
 one-hop questions about three-object scenes on held-out geometries, with evidence
@@ -109,6 +109,121 @@ four validation geometries and their question/appearance variants are correlated
 five shuffle seeds are not five independent training runs. This baseline provides
 scoped synthetic-task evidence, not a claim about broad intelligence, persistent
 memory, real-image reasoning, or recurrence superiority.
+
+## First baseline results
+
+**Outcome: validation gates not met; two of six passed.** The CUDA baseline
+completed the prescribed 10 epochs / 2,880 updates on a Tesla T4, using Python
+3.12.13, PyTorch 2.10.0+cu128, CUDA 12.8, and two Torch CPU threads. The user also
+reports completing the separate smoke notebook; this archive provides baseline
+training and validation evidence, not a separately audited smoke-check archive.
+
+### Training history
+
+| Epoch | Updates | Training loss | Validation loss | Validation accuracy |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 0 | — | 3.206179 | 0.0000% |
+| 1 | 288 | 1.396958 | 1.251384 | 37.1094% |
+| 2 | 576 | 0.930189 | 0.883625 | 50.1736% |
+| 3 | 864 | 0.665829 | 0.962621 | 50.8681% |
+| 4 | 1152 | 0.518065 | 1.100390 | 52.5174% |
+| 5 | 1440 | 0.430347 | 1.108956 | 55.9028% |
+| 6 | 1728 | 0.365307 | 1.092195 | 56.3802% |
+| 7 | 2016 | 0.356425 | 1.330812 | 53.4722% |
+| 8 | 2304 | 0.313074 | 1.408357 | 59.3316% |
+| 9 | 2592 | 0.306107 | 1.610936 | 57.3351% |
+| 10 | 2880 | 0.299399 | 1.724776 | 58.2465% |
+
+Validation loss was lowest at epoch 2 and rose to 1.724776 at epoch 10 while
+training loss continued falling. This is consistent with overfitting and
+increasingly confident validation mistakes, but does not identify their cause.
+No earlier checkpoint was selected and no extra epochs were added. Historical
+training loss averages predictions during optimization; final-checkpoint training
+accuracy and loss were not measured by this run.
+
+### Frozen validation controls
+
+| Condition | Correct / 2,304 | Accuracy | Cross-entropy |
+| --- | ---: | ---: | ---: |
+| Correct inputs | 1342 | 58.2465% | 1.724776 |
+| Blank images | 576 | 25.0000% | 2.178307 |
+| Shuffled images, seed 0 | 577 | 25.0434% | 4.866706 |
+| Shuffled images, seed 1 | 616 | 26.7361% | 4.929136 |
+| Shuffled images, seed 2 | 575 | 24.9566% | 4.872485 |
+| Shuffled images, seed 3 | 580 | 25.1736% | 4.982436 |
+| Shuffled images, seed 4 | 602 | 26.1285% | 4.879006 |
+| Shuffled questions, seed 0 | 856 | 37.1528% | 3.386835 |
+| Shuffled questions, seed 1 | 823 | 35.7205% | 3.507445 |
+| Shuffled questions, seed 2 | 871 | 37.8038% | 3.408978 |
+| Shuffled questions, seed 3 | 873 | 37.8906% | 3.364596 |
+| Shuffled questions, seed 4 | 841 | 36.5017% | 3.459094 |
+
+Mean shuffled-image accuracy: **25.6076%**; mean shuffled-question accuracy:
+**37.0139%**. All conditions produced zero invalid color-token predictions.
+All-four accuracy was **57/576 = 9.8958%**; different-answer-pair accuracy was
+**902/2,880 = 31.3194%**.
+
+| Question anchor | Direction | Correct / 384 | Accuracy |
+| --- | --- | ---: | ---: |
+| circle | left | 183 | 47.6562% |
+| square | left | 197 | 51.3021% |
+| triangle | left | 286 | 74.4792% |
+| circle | right | 210 | 54.6875% |
+| square | right | 196 | 51.0417% |
+| triangle | right | 270 | 70.3125% |
+
+| Gate | Observed | Required | Result |
+| --- | ---: | ---: | --- |
+| overall_accuracy | 58.2465% | ≥90% | Fail |
+| minimum_question_accuracy | 47.6562% | ≥80% | Fail |
+| all_four_accuracy | 9.8958% | ≥80% | Fail |
+| correct_minus_blank | 33.2465 points | ≥30 points | Pass |
+| correct_minus_shuffled_images_mean | 32.6389 points | ≥30 points | Pass |
+| correct_minus_shuffled_questions_mean | 21.2326 points | ≥30 points | Fail |
+
+Images clearly affect performance: both image-control gaps exceed 30 points.
+Question shuffling also reduces accuracy, and some different-answer pairs are
+answered correctly, demonstrating partial question-dependent behavior beyond
+the question-blind middle-color heuristic. Reliability remains inadequate:
+all six question texts are below 80%, and fewer than one in ten images has all
+four answers correct. The shuffled-question result near 37.5% is not itself
+evidence of perfect reasoning; that control retains answer coincidences.
+
+### Artifact audit and provenance
+
+The local review verified checkpoint/manifest/report hashes, exact manifest
+copies, embedded and sidecar settings/history, model configuration, finite model
+weights, optimizer step counters, and the fixed budget. Regenerated corpus
+records match the saved manifest; prescribed image/question permutations and
+question-shuffle answer-match fractions were independently recomputed. The
+acceptance calculations agree with the stored report. Final ordinary validation
+metrics exactly match the correct-input control metrics. No artifact-consistency
+problem was found in these checks. This review did not rerun GPU inference.
+
+- Training revision: `f0e1334a4ed582b1aba526eec80506fef2660392`.
+- Checkpoint SHA256: `d6e39b3aebc75907bb12f548320f4d77c657c88ee8330c4c2d08940b41cbbffb`.
+- Manifest SHA256: `c5a9102eb619bfb134af48177bc1d1c2a083ce9b98d18a116be817b218c78b6c`.
+- Controls SHA256: `065fe803b4de56bd61f71ade97ba63fdf9f547d89713fe263642c8b5c2eda4a9`.
+- Archive SHA256: `049b45c5fdc964876f17aae7d2edb22941c65b1beadf1f639d53655304a98c79`.
+
+The source is the user-supplied local `milestone2_baseline_artifacts.zip`, whose
+root contains `training/`, `validation/`, `data/`, `provenance/`, and `logs/`.
+Raw artifacts are not bundled with this Markdown; retain the original archive
+separately. The manifest includes generator software versions, explaining why
+its hash differs from a corpus generated in another environment.
+
+## Frozen-model diagnosis — pending
+
+The next step measures the unchanged epoch-10 model on all training and
+validation QA examples, with breakdowns by geometry, anchor shape, direction,
+and target position. It also records per-example loss/confidence and a
+target-position confusion table. These diagnostics can localize the failure
+pattern; they do not, by themselves, prove its mechanism.
+
+Use the [diagnostic notebook](../../notebooks/kaggle_milestone2_diagnostics.ipynb)
+and [artifact instructions](../relational_training.md#frozen-baseline-diagnosis).
+No training, tuning, recurrence sweep, or test inference is part of this step.
+Milestone 2 remains incomplete and the package version remains unchanged.
 
 ## Decision and evidence handling
 

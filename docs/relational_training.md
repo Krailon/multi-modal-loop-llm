@@ -4,16 +4,18 @@ The Milestone 2 training path supports the validated three-object relational
 corpus, fixed recurrence depth, epoch-boundary checkpoints, and frozen-model
 image/question controls. The [first baseline protocol](milestones/milestone2.md)
 is fixed at **10 epochs, R=2**, with validation acceptance gates recorded before
-training. The experiment is pending; results will be recorded with that protocol.
+training. The first baseline completed on Kaggle and passed two of six gates;
+its results are recorded with the protocol. Frozen-model diagnosis is next.
 
 ## Importable notebooks
 
-The repository includes two unexecuted notebooks:
+The repository includes three notebooks, with outputs cleared for Git:
 
 | Notebook | Purpose |
 | --- | --- |
 | [CUDA smoke check](../notebooks/kaggle_relational_smoke.ipynb) | Small-corpus training, resume, and validation controls; run this first. |
 | [Milestone 2 baseline](../notebooks/kaggle_milestone2_baseline.ipynb) | Fixed ten-epoch run or continuation, full validation controls, and the recorded acceptance gates. |
+| [Frozen-model diagnosis](../notebooks/kaggle_milestone2_diagnostics.ipynb) | Read-only training/validation analysis of the recorded baseline. |
 
 Commit and push the notebook and package changes to GitHub before importing them.
 Kaggle supports notebook imports from GitHub and external URLs; see its
@@ -54,8 +56,9 @@ download link. Retain that archive (also available among notebook output files)
 before the session ends. No notebook evaluates the research test split.
 
 Notebook structure, Python cells, orchestration, and gate calculations are tested
-locally with mocked script calls. Actual notebook execution on Kaggle GPU remains
-the hardware check; the notebooks contain no precomputed experimental outputs.
+locally with mocked script calls. The user has completed the original smoke and
+baseline notebooks on Kaggle; the baseline archive was audited locally. The new
+diagnostic notebook awaits its GPU run. Committed notebooks contain no execution outputs.
 
 ## Kaggle baseline
 
@@ -194,8 +197,9 @@ counts, and invalid predictions at epoch zero and after every epoch.
 
 `--device` accepts `cpu`, `cuda`, `cuda:N`, or `xla` through the existing runtime.
 Execution is float32, single process, and single device. The relational path has
-CPU correctness coverage; accelerator hardware validation for this path remains
-separate. The prior infrastructure CUDA sign-off is not a relational training result.
+CPU correctness coverage and a completed Tesla T4 baseline run. Successful CUDA
+execution and the baseline's failed capability gates are separate findings;
+see the milestone report for the measured results.
 
 Each run writes:
 
@@ -280,3 +284,51 @@ color can achieve **50%** while ignoring the question. That predictor scores zer
 on both all-four and different-answer-pair accuracy. Interpret the correct-input
 grouped metrics together with the image and question controls. These checks
 establish capability evidence; they do not establish a recurrence advantage.
+
+
+## Frozen baseline diagnosis
+
+Import [the diagnostic notebook from GitHub](https://github.com/Krailon/multi-modal-loop-llm/blob/milestone2/notebooks/kaggle_milestone2_diagnostics.ipynb)
+after pushing the new code. Attach `milestone2_baseline_artifacts.zip` (or its
+extracted directory), enable GPU and internet, and set `BASELINE_SOURCE` to its
+actual Kaggle input path. Use the new diagnostic revision for `REPO_REF`; the
+original training revision is recorded separately. Choose a fresh `RUN_ROOT`.
+The notebook verifies the recorded checkpoint hash and source artifacts before
+inference. ZIP members are validated before extraction; original inputs remain
+unchanged. It runs only the diagnostic CLI, not the baseline training notebook.
+
+For an already extracted baseline, the equivalent command is:
+
+```bash
+python scripts/diagnose_relational.py \
+  --baseline-dir /kaggle/input/your-artifacts/milestone2_baseline \
+  --output-dir /kaggle/working/frozen_diagnosis --device cuda:0
+```
+
+The CLI is deliberately restricted to the recorded CUDA checkpoint. It uses R=2,
+batch size 32, correct inputs, and the embedded train/validation splits. There is
+no split selector, tuning, optimizer update, or test inference. Existing diagnostic
+output directories are rejected. The checkpoint and original control report are
+preserved; newly measured validation metrics are compared with the original
+report and any differences are surfaced rather than silently substituted.
+
+Outputs are `summary.json`, `train_examples.jsonl`, `validation_examples.jsonl`,
+and `inspection.html`. Each JSONL row records prediction ID/color, target ID/color,
+loss, predicted-token confidence, correct-answer probability, original indices,
+question, and the metadata used for breakdowns. Geometry IDs use sorted coordinate
+tuples within each split; full coordinates are included. Position labels are
+left/middle/right in spatial order. Predictions matching the unused fourth color
+are `absent_color`; non-color token predictions are `invalid_token` and retain
+their token ID with a null predicted color.
+
+Summary tables cover geometry, anchor shape, direction, target position,
+anchor-shape × direction, and geometry × target position, plus the target-position
+confusion table. The final frozen-model training metrics differ from historical
+training losses averaged during optimization. The HTML shows eight most confident
+incorrect QAs per split, ties by stored index, with all four predictions for each
+selected image. These are illustrative selected errors, not a representative sample.
+
+The notebook packages new reports, source hashes, both code revisions, runtime
+information, and logs into a diagnostic ZIP. Staged baseline copies are excluded;
+retain the original baseline archive separately. Bring the new ZIP back for review
+before choosing any further experiment. No diagnostic conclusions have been recorded yet.
