@@ -355,8 +355,11 @@ answers. Both the image and question must affect answers appropriately.
 The first baseline budget and validation gates are fixed in
 [the Milestone 2 protocol](docs/milestones/milestone2.md). Preserve them when
 running or assessing that experiment. The first CUDA baseline passed two of six
-validation gates; frozen-model train/validation diagnosis is next. Preserve the
-original artifacts and reserve test inference for a later authorized step.
+validation gates; frozen-model diagnosis found circle/square question confusion
+and poor layout transfer. The next experiment is
+[direct shape grounding](docs/milestones/milestone2_shape_grounding.md) on the same
+images with fresh weights and 2,880 updates. Preserve the original artifacts and
+renderer, and reserve test inference for a later authorized step.
 Recurrence comparisons may follow, but an
 advantage is not a milestone completion gate. Later research priorities can evolve with capability
 needs; preserve simple baselines and explicit computational budgets.

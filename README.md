@@ -1024,7 +1024,8 @@ different answers. This tests question dependence as well as image dependence.
 The deterministic corpus and fixed-depth training/control infrastructure are
 implemented. The [first baseline protocol](docs/milestones/milestone2.md) fixes
 the training budget and validation acceptance gates. The first Kaggle baseline
-completed but missed four gates; frozen-model diagnosis is next.
+completed but missed four gates; the completed diagnosis motivates a
+[direct shape-grounding sanity experiment](docs/milestones/milestone2_shape_grounding.md).
 
 Recurrence comparisons can follow as research. Demonstrating an advantage from
 additional recurrent steps is not required to complete this capability milestone.
@@ -1150,7 +1151,7 @@ These projects provide useful reference implementations and experimental precede
 # Status
 
 **Phase:** Milestone 2 in progress — the fixed-depth relational baseline has been
-evaluated on Kaggle; frozen-model training/validation diagnosis is next.
+evaluated and diagnosed on Kaggle; a direct shape-grounding sanity experiment is next.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
@@ -2186,14 +2187,15 @@ See [relational training, checkpoint, and control usage](docs/relational_trainin
 for Kaggle commands, artifact formats, and interpretation. The
 [Milestone 2 protocol and future results](docs/milestones/milestone2.md) record
 the agreed 10-epoch, R=2 baseline, its results, and validation gates. The first
-baseline passed two of six gates; use the
-[frozen-model diagnostic notebook](notebooks/kaggle_milestone2_diagnostics.ipynb)
-next to investigate training and validation errors.
+baseline passed two of six gates. Its frozen diagnosis is recorded in the same
+results document. Use the
+[direct shape-grounding notebook](notebooks/kaggle_milestone2_shape_grounding.ipynb)
+for the [next controlled experiment](docs/milestones/milestone2_shape_grounding.md).
 
-Immediate objective — Milestone 2 diagnosis:
+Immediate objective — direct shape grounding:
 
-> Diagnose the frozen baseline's training and validation errors before choosing
-> the next capability experiment. Preserve the original baseline and reserved test split.
+> Test shape-to-color selection on the same scenes without neighbor selection.
+> Preserve the original baseline, renderer, and reserved test split.
 
 Scale comes later.
 

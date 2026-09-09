@@ -2,7 +2,7 @@
 
 ## Status
 
-**First baseline complete; validation gates not met. Frozen-model diagnosis pending.**
+**First baseline and frozen-model diagnosis complete; validation gates not met.**
 
 The original budget and thresholds below were agreed before training and remain
 unchanged. The baseline completed on Kaggle CUDA and passed two of six validation
@@ -212,18 +212,83 @@ Raw artifacts are not bundled with this Markdown; retain the original archive
 separately. The manifest includes generator software versions, explaining why
 its hash differs from a corpus generated in another environment.
 
-## Frozen-model diagnosis — pending
+## Frozen-model diagnosis — completed
 
-The next step measures the unchanged epoch-10 model on all training and
-validation QA examples, with breakdowns by geometry, anchor shape, direction,
-and target position. It also records per-example loss/confidence and a
-target-position confusion table. These diagnostics can localize the failure
-pattern; they do not, by themselves, prove its mechanism.
+The Kaggle archive `milestone2_diagnostics_artifacts.zip` evaluates the unchanged
+final checkpoint on all training and validation examples at R=2, batch size 32.
+Diagnostic revision: `186266e526d45d063490bfe0e7a2cf93c3b1a3e6`. Runtime: PyTorch
+2.10.0+cu128, CUDA 12.8, Tesla T4, two CPU threads. Its checkpoint, manifest, and
+original-controls hashes match the baseline. Validation accuracy, counts, invalid
+outputs, and loss reproduce the original report exactly. No test inference or
+additional training was performed.
 
-Use the [diagnostic notebook](../../notebooks/kaggle_milestone2_diagnostics.ipynb)
-and [artifact instructions](../relational_training.md#frozen-baseline-diagnosis).
-No training, tuning, recurrence sweep, or test inference is part of this step.
-Milestone 2 remains incomplete and the package version remains unchanged.
+| Metric | Training | Validation |
+| --- | ---: | ---: |
+| Correct / total | 7,641 / 9,216 | 1,342 / 2,304 |
+| Overall accuracy | 82.91% | 58.25% |
+| Triangle-anchor accuracy | 99.71% | 72.40% |
+| Circle-anchor accuracy | 75.75% | 51.17% |
+| Square-anchor accuracy | 73.27% | 51.17% |
+| All-four accuracy | 35.42% | 9.90% |
+| Loss | 0.2862 | 1.7248 |
+
+### Circle/square distinction
+
+A local analysis joined saved predictions to the original scene manifest and
+independently checked each target against its anchor's adjacent object. Among
+circle/square questions, classify a case as requiring their distinction when
+**both** possible anchors have a valid neighbor in the requested direction.
+Otherwise the scene boundary allows selecting the anchor even if these two
+shape identities are conflated. The questions themselves have unambiguous labels.
+
+| Training category | Correct / total | Accuracy |
+| --- | ---: | ---: |
+| Circle/square distinction required | 1,547 / 3,072 | 50.36% |
+| Circle/square boundary-resolvable | 3,031 / 3,072 | 98.67% |
+| Triangle anchor | 3,063 / 3,072 | 99.71% |
+
+For 1,424 / 1,536 (92.71%) same-image, same-direction circle/square question
+pairs requiring different answers, the predictions were identical. Both answers
+were correct in only 65 pairs. Validation had identical predictions in 345 / 384
+such pairs, with 21 pairs both correct.
+
+Example from training: red circle, yellow square, green triangle, left to right.
+The model answers green to both “right of the circle?” (target yellow) and
+“right of the square?” (target green).
+
+This strongly supports a partial solution that does not reliably use the
+circle/square distinction. Succeeding on two-thirds of questions and guessing
+between two candidates on the other third would score 83.33%, close to the
+observed training accuracy. It does **not** prove whether the bottleneck is visual
+recognition, shape-word binding, or another learned computation.
+
+The actual renderer was inspected: a size-6 circle differs from its square by
+only four corner pixels; at size 8, by 12 pixels. The shapes are distinct, but
+this is a plausible source of difficulty. No renderer change was made.
+
+### Layout transfer and confidence
+
+Training accuracy spans 80.56–84.03% across 16 geometries. Validation accuracy
+across its four geometries is 45.83%, 66.49%, 44.44%, and 76.22% in sorted geometry
+order. On `validation:g002`, all 144 right-target answers instead name the middle
+object's color. Its bounding boxes are `(4,1,8)`, `(15,1,8)`, `(25,2,6)` in
+`(left,top,size)` order; training objects never start above row 6. Another poor
+layout is lower down, so vertical coverage alone does not explain the failure.
+The 2,304 validation questions reuse only four layouts, not 2,304 independent
+spatial configurations.
+
+Every validation prediction is a color present in the scene; training has only
+three absent-color predictions. Left/right aggregate performance is similar.
+Of 962 validation errors, 523 have confidence at least 90%, compared with 27 of
+1,575 training errors. Mean error confidence is 84.58% on validation versus
+60.80% on training, consistent with the worsening validation loss.
+
+These results identify incomplete training-set learning and a further layout
+transfer gap. They do not establish a recurrence advantage or disadvantage.
+Milestone 2 remains incomplete and the version stays unchanged. Preserve the
+original baseline and diagnostic archives. The next bounded experiment is
+[direct shape grounding](milestone2_shape_grounding.md), with its own protocol;
+the original relational gates remain unchanged.
 
 ## Decision and evidence handling
 
