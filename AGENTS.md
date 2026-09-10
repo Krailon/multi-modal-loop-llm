@@ -357,11 +357,13 @@ The first baseline budget and validation gates are fixed in
 running or assessing that experiment. The first CUDA baseline passed two of six
 validation gates; frozen-model diagnosis found circle/square question confusion
 and poor layout transfer. The direct-grounding run reached 94.21% training and
-56.25% validation accuracy (three of nine criteria passed). The next experiment is
-[training geometry diversity](docs/milestones/milestone2_geometry_diversity.md):
-128 layouts, fresh weights, unchanged model/rendering and 2,880 updates. Preserve
-the original artifacts and exact validation/test records; reserve test inference
-for a later authorized step.
+56.25% validation accuracy (three of nine criteria passed). The completed
+[geometry-diversity results](docs/milestones/milestone2_geometry_diversity.md#results)
+show improved held-out performance and all three dependence controls passing;
+per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. A
+training-budget follow-up is a recommendation, not an established protocol. Preserve
+all artifacts and exact validation/test records; reserve test inference for a later
+authorized step.
 Recurrence comparisons may follow, but an
 advantage is not a milestone completion gate. Later research priorities can evolve with capability
 needs; preserve simple baselines and explicit computational budgets.

@@ -286,11 +286,11 @@ Of 962 validation errors, 523 have confidence at least 90%, compared with 27 of
 These results identify incomplete training-set learning and a further layout
 transfer gap. They do not establish a recurrence advantage or disadvantage.
 Milestone 2 remains incomplete and the version stays unchanged. Preserve the
-original baseline and diagnostic archives. The next bounded experiment is
-[direct shape grounding](milestone2_shape_grounding.md), with its own protocol;
-the original relational gates remain unchanged.
-The direct-grounding run is now complete; its [results](milestone2_shape_grounding.md#results)
-motivate a [geometry-diversity follow-up](milestone2_geometry_diversity.md).
+original baseline and diagnostic archives. Subsequent
+[direct-grounding results](milestone2_shape_grounding.md#results) and
+[geometry-diversity results](milestone2_geometry_diversity.md#results) are recorded
+in their own experiment documents. Both runs are complete; accuracy criteria
+remain unmet. The original relational gates remain unchanged.
 
 ## Decision and evidence handling
 

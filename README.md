@@ -1152,7 +1152,9 @@ These projects provide useful reference implementations and experimental precede
 
 **Phase:** Milestone 2 in progress — the fixed-depth relational baseline has been
 evaluated and diagnosed on Kaggle; direct grounding also showed a transfer gap.
-The next experiment expands training geometry diversity.
+The geometry-diversity experiment is complete;
+[results and remaining limitations](docs/milestones/milestone2_geometry_diversity.md#results)
+are recorded separately.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
@@ -2191,13 +2193,14 @@ the agreed 10-epoch, R=2 baseline, its results, and validation gates. The first
 baseline passed two of six gates. Its frozen diagnosis is recorded in the same
 results document. Use the
 [geometry-diversity notebook](notebooks/kaggle_milestone2_geometry_diversity.ipynb)
-for the [next controlled experiment](docs/milestones/milestone2_geometry_diversity.md),
-following the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#results).
+for the recorded experiment; its
+[completed results](docs/milestones/milestone2_geometry_diversity.md#results) build on
+the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#results).
 
-Immediate objective — training geometry diversity:
+Immediate objective — resolve remaining direct-grounding errors:
 
-> Expand direct-grounding training to 128 layouts at the same update budget.
-> Preserve the architecture, renderer, and recorded validation/test scenes.
+> Specify the next controlled follow-up using the completed geometry-diversity results.
+> Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
 

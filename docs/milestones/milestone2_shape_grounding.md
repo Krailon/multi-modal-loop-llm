@@ -177,9 +177,11 @@ Of 756 validation errors, 374 had at least 90% confidence.
 
 This identifies substantial incomplete transfer across layouts, alongside remaining
 training errors. It does not isolate recognition, word-to-shape binding, optimization
-or image-frontend mechanisms. The next controlled experiment expands
-[training geometry diversity](milestone2_geometry_diversity.md) while retaining the
-other direct-grounding settings. Milestone 2 remains incomplete.
+or image-frontend mechanisms. The subsequent
+[training geometry-diversity experiment](milestone2_geometry_diversity.md#results)
+is complete and reports improved held-out performance with remaining accuracy
+failures. Its protocol retained the other direct-grounding settings. Milestone 2
+remains incomplete.
 
 Retain `milestone2_shape_grounding_artifacts.zip` and these identities:
 
