@@ -289,6 +289,8 @@ Milestone 2 remains incomplete and the version stays unchanged. Preserve the
 original baseline and diagnostic archives. The next bounded experiment is
 [direct shape grounding](milestone2_shape_grounding.md), with its own protocol;
 the original relational gates remain unchanged.
+The direct-grounding run is now complete; its [results](milestone2_shape_grounding.md#results)
+motivate a [geometry-diversity follow-up](milestone2_geometry_diversity.md).
 
 ## Decision and evidence handling
 

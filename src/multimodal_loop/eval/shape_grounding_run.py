@@ -1,14 +1,18 @@
 """Publish complete frozen train/validation reports from a direct-color checkpoint."""
 
 import json
+from math import fsum
 from pathlib import Path
 
+from multimodal_loop.data.geometry_diversity import geometry_of
+from multimodal_loop.data.relational_dataset import parse_relational_manifest
 from multimodal_loop.data.shape_grounding import ShapeColorDataset
 from multimodal_loop.eval.shape_grounding import (
     assess_shape_grounding,
     diagnose_shape_grounding,
     evaluate_shape_controls,
     inspection_html,
+    summarize_examples,
 )
 from multimodal_loop.train.kaggle import file_hash
 from multimodal_loop.train.runtime import runtime_metadata
@@ -33,6 +37,11 @@ def evaluate_checkpoint(checkpoint, destination, *, device="cpu", seeds=(0, 1, 2
     for split, dataset in datasets.items():
         print(f"Diagnosing {split}: {len(dataset)} direct-color questions", flush=True)
         summaries[split], rows[split] = diagnose_shape_grounding(model, dataset, training)
+    training_subsets = None
+    derivation = payload.get("corpus_derivation")
+    if derivation is not None:
+        source = parse_relational_manifest(derivation["source_manifest_content"])
+        training_subsets = training_geometry_subsets(rows["train"], datasets["train"], source)
     print("Evaluating validation image/question controls", flush=True)
     controls = evaluate_shape_controls(
         model, datasets["validation"], training, seeds=seeds, correct=summaries["validation"]
@@ -40,6 +49,8 @@ def evaluate_checkpoint(checkpoint, destination, *, device="cpu", seeds=(0, 1, 2
     report = {
         "kind": "direct_shape_color_diagnostics",
         "smoke": payload["smoke"],
+        "corpus_derivation": derivation,
+        "training_geometry_subsets": training_subsets,
         "format_version": 1,
         "checkpoint_sha256": checkpoint_hash,
         "manifest_sha256": manifest.sha256,
@@ -77,3 +88,30 @@ def evaluate_checkpoint(checkpoint, destination, *, device="cpu", seeds=(0, 1, 2
                 handle.write(json.dumps(row, allow_nan=False) + "\n")
     (destination / "inspection.html").write_text(inspection_html(rows, datasets), encoding="utf-8")
     return report
+
+
+def training_geometry_subsets(rows, dataset, source):
+    """Reuse saved predictions; compare complete image triples without new inference."""
+    original = {geometry_of(r) for r in source.splits["train"]}
+    result = {}
+    for name, retained in (("original", True), ("added", False)):
+        selected = [
+            r
+            for r in rows
+            if (geometry_of(dataset.records[r["image_index"]]) in original) == retained
+        ]
+        if not selected:
+            raise ValueError("both original and added geometry groups must be nonempty")
+        total = len(selected)
+        correct = sum(r["correct"] for r in selected)
+        result[name] = {
+            "total": total,
+            "correct": correct,
+            "accuracy": correct / total,
+            "invalid_predictions": sum(
+                r["predicted_position"] == "invalid_token" for r in selected
+            ),
+            "loss": fsum(r["loss"] for r in selected) / total,
+            **summarize_examples(selected),
+        }
+    return result

@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-**Protocol fixed; implementation ready for a Kaggle run. No research results yet.**
+**First run complete; three of nine diagnostic criteria passed.**
 
 The [original baseline diagnosis](milestone2.md#frozen-model-diagnosis--completed)
 found near-perfect triangle-anchor training accuracy but approximately 50%
@@ -141,3 +141,49 @@ it does not prove the shapes are indistinguishable or the architecture incapable
 Any renderer, geometry-coverage, or training-budget follow-up gets its own recorded
 protocol. Preserve this run and the original baseline. None of these fixed-R results
 establishes a recurrence advantage or disadvantage.
+
+
+## Results
+
+Kaggle completed the fixed 2,880 updates and 92,160 presentations using a clean
+checkout at `e61402bacb14d2198a0b1a4a4180718457b3e784`, PyTorch 2.10.0+cu128,
+CUDA 12.8, a Tesla T4 and two CPU threads. Source manifest, model/optimizer settings,
+checkpoint counters, saved prediction aggregates and criteria were checked locally.
+No test inference or additional training was performed.
+
+| Metric | Training | Validation |
+| --- | ---: | ---: |
+| Correct / total | 6,512 / 6,912 | 972 / 1,728 |
+| Overall accuracy | 94.21% | 56.25% |
+| Circle accuracy | 91.41% | 43.40% |
+| Square accuracy | 92.14% | 58.33% |
+| Triangle accuracy | 99.09% | 67.01% |
+| All-three accuracy | 85.59% | 24.13% |
+| Circle/square pair accuracy | 86.28% | 31.08% |
+| Identical circle/square predictions | 10.33% | 24.48% |
+| Loss | 0.1431 | 1.7399 |
+
+Validation controls: blank images 25.00%, mean shuffled images 25.14%, mean shuffled
+questions 32.96%. The gaps are 31.25, 31.11 and 23.29 percentage points. Only the
+triangle training threshold and the blank/shuffled-image gaps passed. The original
+nine criteria remain unchanged.
+
+The model learned direct selection on many familiar scenes. Size-6 circle/square
+training accuracy is 88.51%/87.64%, versus 95.83%/99.01% at size eight. However,
+triangles also lose substantial validation accuracy, so subtle circle/square pixels
+alone do not explain the transfer failure. Validation accuracy reached 58.04% at
+step 1,152 and did not improve beyond that, while training loss continued falling.
+Of 756 validation errors, 374 had at least 90% confidence.
+
+This identifies substantial incomplete transfer across layouts, alongside remaining
+training errors. It does not isolate recognition, word-to-shape binding, optimization
+or image-frontend mechanisms. The next controlled experiment expands
+[training geometry diversity](milestone2_geometry_diversity.md) while retaining the
+other direct-grounding settings. Milestone 2 remains incomplete.
+
+Retain `milestone2_shape_grounding_artifacts.zip` and these identities:
+
+- Archive: `f3ac90d31463ba6e4b0ddd42d9ba30446e2dbb06b8d430978fc9a509d1578c5a`
+- Checkpoint: `529cd69edb893236d23ff0e9b704a15f5a0d8e3db0486d988f942f08f5ccb41d`
+- Summary: `5d51dde2bfbfb6db984e37a0fddf58afa220cfa792dadfbf5913efc04afa844d`
+- Controls: `0aa731371ca133a661a4daaaae10309a8107147574ad8f49271e2f2416d62515`

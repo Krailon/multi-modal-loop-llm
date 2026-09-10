@@ -1151,7 +1151,8 @@ These projects provide useful reference implementations and experimental precede
 # Status
 
 **Phase:** Milestone 2 in progress — the fixed-depth relational baseline has been
-evaluated and diagnosed on Kaggle; a direct shape-grounding sanity experiment is next.
+evaluated and diagnosed on Kaggle; direct grounding also showed a transfer gap.
+The next experiment expands training geometry diversity.
 
 **Milestone 0:** Infrastructure and correctness, officially complete.
 
@@ -2189,13 +2190,14 @@ for Kaggle commands, artifact formats, and interpretation. The
 the agreed 10-epoch, R=2 baseline, its results, and validation gates. The first
 baseline passed two of six gates. Its frozen diagnosis is recorded in the same
 results document. Use the
-[direct shape-grounding notebook](notebooks/kaggle_milestone2_shape_grounding.ipynb)
-for the [next controlled experiment](docs/milestones/milestone2_shape_grounding.md).
+[geometry-diversity notebook](notebooks/kaggle_milestone2_geometry_diversity.ipynb)
+for the [next controlled experiment](docs/milestones/milestone2_geometry_diversity.md),
+following the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#results).
 
-Immediate objective — direct shape grounding:
+Immediate objective — training geometry diversity:
 
-> Test shape-to-color selection on the same scenes without neighbor selection.
-> Preserve the original baseline, renderer, and reserved test split.
+> Expand direct-grounding training to 128 layouts at the same update budget.
+> Preserve the architecture, renderer, and recorded validation/test scenes.
 
 Scale comes later.
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import torch
 import yaml
 
+from multimodal_loop.data.geometry_diversity import derive_geometry_corpus, presentation_summary
 from multimodal_loop.data.relational_dataset import load_relational_manifest
 from multimodal_loop.data.shape_grounding import ShapeColorCollator
 from multimodal_loop.eval.baseline_artifacts import BASELINE_MANIFEST_SHA256
@@ -26,6 +27,7 @@ from multimodal_loop.train.synthetic import SyntheticTrainingConfig
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--geometry-source-manifest", type=Path)
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument(
         "--model-config", type=Path, default=Path("configs/relational_baseline.yaml")
@@ -41,12 +43,32 @@ def main():
         if args.output_dir.exists():
             raise ValueError("training requires a fresh output directory; resume is not supported")
         manifest = load_relational_manifest(args.manifest)
-        if not args.smoke and manifest.sha256 != BASELINE_MANIFEST_SHA256:
+        if (
+            not args.smoke
+            and args.geometry_source_manifest is None
+            and manifest.sha256 != BASELINE_MANIFEST_SHA256
+        ):
             raise ValueError("research run requires the original baseline manifest SHA256")
         config = ModelConfig(**yaml.safe_load(args.model_config.read_text()))
         ShapeColorCollator(config)
         if config.vocab_size != 17 or config.image_size != manifest.config.image_size:
             raise ValueError("model must have vocab_size=17 and match manifest image_size")
+        derivation = None
+        if args.geometry_source_manifest is not None:
+            source = load_relational_manifest(args.geometry_source_manifest)
+            if not args.smoke and (
+                source.sha256 != BASELINE_MANIFEST_SHA256
+                or manifest.config.train_geometry_count != 128
+                or config.patch_size != 8
+            ):
+                raise ValueError("derived research requires the original source and 128 geometries")
+            expected, derivation = derive_geometry_corpus(
+                source,
+                geometry_count=manifest.config.train_geometry_count,
+                patch_size=config.patch_size,
+            )
+            if expected.content != manifest.content:
+                raise ValueError("manifest disagrees with deterministic geometry derivation")
         device = resolve_device(args.device)
         if device.type not in ("cpu", "cuda"):
             raise ValueError("this experiment supports CPU and CUDA")
@@ -76,6 +98,7 @@ def main():
         args.output_dir / "settings.json",
         {
             "kind": "direct_shape_color",
+            "corpus_derivation": derivation,
             "smoke": args.smoke,
             "revision": revision,
             "dirty": dirty,
@@ -89,6 +112,17 @@ def main():
         },
     )
 
+    if derivation is not None:
+        write_json(
+            args.output_dir / "presentations.json",
+            presentation_summary(
+                manifest,
+                max_steps=budget.max_steps,
+                batch_size=training.batch_size,
+                seed=training.seed,
+            ),
+        )
+
     def publish(history):
         save_shape_checkpoint(
             args.output_dir / "last.pt",
@@ -99,6 +133,7 @@ def main():
             budget=budget,
             history=history,
             smoke=args.smoke,
+            corpus_derivation=derivation,
         )
         write_json(args.output_dir / "metrics.json", history)
         row = history[-1]

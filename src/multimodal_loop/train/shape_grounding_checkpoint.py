@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 
+from multimodal_loop.data.geometry_diversity import validate_geometry_derivation
 from multimodal_loop.data.relational_dataset import parse_relational_manifest
 from multimodal_loop.data.shape_grounding import ShapeColorCollator, ShapeColorTokenizer
 from multimodal_loop.train.checkpoint import (
@@ -82,7 +83,16 @@ def _validate_progress(manifest, training, budget, history):
 
 
 def save_shape_checkpoint(
-    path, model, optimizer, *, manifest, training, budget, history, smoke=False
+    path,
+    model,
+    optimizer,
+    *,
+    manifest,
+    training,
+    budget,
+    history,
+    smoke=False,
+    corpus_derivation=None,
 ):
     _validate_progress(manifest, training, budget, history)
     if type(smoke) is not bool or next(model.parameters()).dtype != torch.float32:
@@ -92,6 +102,7 @@ def save_shape_checkpoint(
         finish_step(device)
         payload = {
             "kind": "direct_shape_color",
+            "corpus_derivation": corpus_derivation,
             "format_version": 1,
             "smoke": smoke,
             **_snapshot_model_optimizer(model, optimizer),
@@ -132,6 +143,21 @@ def load_shape_checkpoint(path, *, device="cpu"):
     manifest = parse_relational_manifest(payload["manifest_content"])
     if manifest.sha256 != payload["manifest_sha256"]:
         raise ValueError("checkpoint manifest SHA256 mismatch")
+    derivation = payload.get("corpus_derivation")
+    if derivation is not None:
+        source = validate_geometry_derivation(manifest, derivation)
+        if derivation["patch_size"] != payload["config"]["patch_size"]:
+            raise ValueError("derivation patch size disagrees with model")
+        if not payload["smoke"]:
+            from multimodal_loop.eval.baseline_artifacts import BASELINE_MANIFEST_SHA256
+
+            if (
+                source.sha256 != BASELINE_MANIFEST_SHA256
+                or derivation["geometry_count"] != 128
+                or derivation["selection_seed"] != 0
+                or derivation["patch_size"] != 8
+            ):
+                raise ValueError("derived research checkpoint violates geometry protocol")
     training = SyntheticTrainingConfig(**payload["training_config"])
     budget = ShapeGroundingConfig(**payload["budget"])
     _validate_progress(manifest, training, budget, payload["history"])
