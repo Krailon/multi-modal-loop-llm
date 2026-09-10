@@ -271,7 +271,11 @@ confusion leave the learning mechanism unresolved. This is one seed on four
 validation layouts, not evidence of broad generalization or a recurrence advantage.
 
 A separately specified, modest increase in training budget on this corpus is a
-recommended next controlled question. Further training would require a separate
-recorded protocol; no new budget or experiment is established here. Preserve this
+recommended next controlled question. At the close of this review, no new budget
+or experiment had been established; further training required a separate protocol. Preserve this
 run and its original protocol before considering further data, optimization or
 image-frontend changes.
+
+The separate [training-budget follow-up](milestone2_training_budget.md) now fixes
+a fresh 5,760-update run on this exact corpus. It is specified but not yet run;
+the completed experiment and its original budget remain unchanged.

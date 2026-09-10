@@ -449,3 +449,17 @@ def test_fixed_notebook_workflow_and_comparison(monkeypatch, tmp_path):
         module.run_geometry_diversity(run)
     with pytest.raises(ValueError, match="fresh run"):
         module.prepare_geometry_diversity(repo, root, reference)
+
+
+def test_training_budget_exposure_counts(full_corpus):
+    _, manifest, _ = full_corpus
+    report = presentation_summary(manifest, max_steps=5760)
+    assert report["presentations"] == 184320
+    assert report["unique_qas_seen"] == 55296
+    assert report["mean_presentations_per_qa"] == 10 / 3
+    assert report["qa_visit_histogram"] == [
+        {"visits": 3, "qa_count": 36864},
+        {"visits": 4, "qa_count": 18432},
+    ]
+    for counts in report["exposure_totals"].values():
+        assert sum(counts.values()) == 184320

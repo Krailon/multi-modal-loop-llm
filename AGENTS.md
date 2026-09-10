@@ -360,8 +360,9 @@ and poor layout transfer. The direct-grounding run reached 94.21% training and
 56.25% validation accuracy (three of nine criteria passed). The completed
 [geometry-diversity results](docs/milestones/milestone2_geometry_diversity.md#results)
 show improved held-out performance and all three dependence controls passing;
-per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. A
-training-budget follow-up is a recommendation, not an established protocol. Preserve
+per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. The separate
+[training-budget protocol](docs/milestones/milestone2_training_budget.md) specifies
+a fresh 5,760-update run on the same corpus; it has not yet been run. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an
