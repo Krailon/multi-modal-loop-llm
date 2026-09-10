@@ -16,6 +16,8 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   [latest results](docs/milestones/milestone2_geometry_diversity.md#results).
   The completed [training-budget results](docs/milestones/milestone2_training_budget.md#results)
   show improved circle/square grounding; five of nine criteria pass.
+  A [focused diagnosis](docs/milestones/milestone2_focused_diagnosis.md)
+  identifies remaining size-dependent swaps and layout-sensitive errors.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2169,8 +2171,8 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> Select the next controlled follow-up using the completed
-> [training-budget results](docs/milestones/milestone2_training_budget.md#results).
+> Specify the next controlled follow-up using the
+> [focused size/layout diagnosis](docs/milestones/milestone2_focused_diagnosis.md).
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.

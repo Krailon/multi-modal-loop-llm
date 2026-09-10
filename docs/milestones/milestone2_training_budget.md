@@ -206,3 +206,8 @@ Five of nine direct-grounding criteria pass, but reliable grounding and
 not broad layout-generalization evidence or a recurrence comparison. Preserve
 this run and its fixed budget. Selecting the next controlled follow-up is the
 next decision; no additional experiment or training extension is established here.
+
+The subsequent [focused local diagnosis](milestone2_focused_diagnosis.md)
+identifies strong relative-size dependence in circle/square swaps and a separate
+position-sensitive deficit in the difficult validation layout. It uses saved
+predictions only and establishes no new training or inference protocol.
