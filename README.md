@@ -1,6 +1,27 @@
 # Multimodal Loop Transformer
 
-An experimental multimodal foundation-model architecture built around **recurrent depth**.
+An experimental multimodal recurrent-depth transformer trained from scratch.
+
+## Current status
+
+- **Milestone 0 complete:** model correctness, checkpoint/resume infrastructure,
+  and Kaggle single-device CUDA validation; TPU hardware validation is deferred.
+- **Milestone 1 complete:** single-object color grounding on held-out layouts.
+  See the [results and close-out review](docs/milestones/milestone1.md).
+- **Milestone 2 in progress:** the relational baseline and direct-grounding
+  follow-up exposed learning and layout-transfer gaps. Expanded training geometry
+  improved direct grounding and passed all three dependence controls, but
+  circle/square reliability and per-shape accuracy criteria remain unresolved.
+  See the [baseline report](docs/milestones/milestone2.md) and
+  [latest results](docs/milestones/milestone2_geometry_diversity.md#results).
+
+The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
+with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
+synthetic capability experiments; a recurrence advantage has not been tested.
+Milestone 2 test inference remains reserved for a later authorized step;
+Milestone 1's test split has already been evaluated.
+
+## Project goal
 
 The primary goal is to progressively build and train a **usable multimodal model**
 that supports increasingly complex long-term awareness experiments. Progress will
@@ -89,17 +110,10 @@ $$
 
 where \(h_r\) contains both linguistic and visual representations.
 
-The hope is that successive recurrent steps can perform progressively deeper multimodal computation:
-
-```text
-Loop 1 → identify relevant visual features
-Loop 2 → establish relationships
-Loop 3 → combine visual and linguistic information
-Loop 4 → perform reasoning
-Loop 5 → refine the answer
-```
-
-These stages are not explicitly programmed into the model. They are behaviors we want to determine whether the model can learn.
+Successive recurrent steps may learn to refine multimodal representations and
+answers. This is a hypothesis: specialized roles for individual steps have not
+been demonstrated, and the fixed-depth capability results do not establish a
+benefit from recurrence.
 
 ---
 
@@ -173,21 +187,24 @@ An especially interesting result would be continued improvement at recurrence de
 
 ### 4. Does task complexity correlate with useful recurrent depth?
 
-Synthetic multimodal tasks will be constructed with explicitly controllable reasoning depth.
-
-For example:
+Future synthetic tasks can vary the number of relational steps explicitly.
+Here, a hop means traversing one spatial relation; identifying an anchor or
+reading its attribute does not add a relational hop.
 
 ```text
-1-hop:
+Direct attribute lookup (0 relational hops; implemented):
 "What color is the square?"
 
-2-hop:
-"What shape is left of the blue circle?"
+1 relational hop (implemented in Milestone 2):
+"What color is the object immediately left of the circle?"
 
-4-hop:
-"What color is the object below the shape
-left of the triangle nearest the red square?"
+2 relational hops (future example, requiring an unambiguous scene):
+"What color is the object immediately right of the object
+immediately right of the triangle?"
 ```
+
+Longer chains are future task designs, not capabilities demonstrated by the
+current experiments.
 
 This allows us to study the relationship:
 
@@ -242,12 +259,14 @@ A failed experiment should tell us *what failed*.
 
 ## Small models before large models
 
-Approximate experimental progression:
+The current Milestone 2 experiments use 172,928 parameters. Larger configurations
+below are possible future scales, not a committed progression or a minimum size
+for debugging:
 
 ```text
 20–50M parameters
     ↓
-debugging and synthetic experiments
+possible larger synthetic experiments
 
 50–150M
     ↓
@@ -402,76 +421,28 @@ casts. `TransformerBlock` provides residual connections and normalization;
 
 # Repository Structure
 
-Importable code lives under `src/multimodal_loop/`. Configuration, patch and
-multimodal embeddings, attention-mask helpers, self-attention, transformer
-blocks/stacks, the recurrent core, and the complete language-model composition
-are implemented, along with shifted language loss, a minimal tensor-batch
-training loop, and single-device checkpoint/resume support. Data, evaluation, and
-training-policy components remain scaffolding for subsequent increments.
+Importable code lives under `src/multimodal_loop/`. The model, synthetic corpus
+generation, tokenization/batching, fixed-depth training, checkpoint/resume,
+control evaluation, and frozen-model diagnostics are implemented. Some reserved
+modules for future training policies and diagnostics remain placeholders.
+
+This overview groups the implemented capabilities rather than listing every file:
 
 ```text
-multimodal-loop/
-│
+multi-modal-loop-llm/
 ├── README.md
-│
+├── AGENTS.md
 ├── pyproject.toml
-├── requirements.txt
-│
-├── configs/
-│   ├── debug.yaml
-│   ├── tiny.yaml
-│   └── base.yaml
-│
-├── src/
-│   └── multimodal_loop/
-│       ├── __init__.py
-│       ├── model/
-│       │   ├── __init__.py
-│       │   ├── config.py
-│       │   ├── embeddings.py
-│       │   ├── patch_embedding.py
-│       │   ├── attention.py
-│       │   ├── transformer.py
-│       │   ├── recurrent_core.py
-│       │   └── model.py
-│       ├── data/
-│       │   ├── __init__.py
-│       │   ├── synthetic_shapes.py
-│       │   ├── text.py
-│       │   ├── multimodal.py
-│       │   └── collator.py
-│       ├── train/
-│       │   ├── __init__.py
-│       │   ├── runtime.py
-│       │   ├── checkpoint.py
-│       │   ├── trainer.py
-│       │   ├── recurrence.py
-│       │   ├── losses.py
-│       │   └── schedules.py
-│       └── eval/
-│           ├── __init__.py
-│           ├── synthetic.py
-│           ├── recurrence_sweep.py
-│           ├── stability.py
-│           └── diagnostics.py
-│
-├── scripts/
-│   ├── train.py
-│   ├── evaluate.py
-│   └── generate_synthetic_data.py
-│
-└── tests/
-    ├── test_config.py
-    ├── test_attention_mask.py
-    ├── test_attention.py
-    ├── test_patch_embedding.py
-    ├── test_embeddings.py
-    ├── test_transformer.py
-    ├── test_recurrence.py
-    ├── test_model.py
-    ├── test_losses.py
-    ├── test_trainer.py
-    └── test_checkpoint.py
+├── configs/          # model configurations, including the relational baseline
+├── src/multimodal_loop/
+│   ├── model/        # embeddings, attention, transformer, shared recurrent core
+│   ├── data/         # rendering, corpora, manifests, tokenization, batching
+│   ├── train/        # training loops, device handling, checkpoints and resume
+│   └── eval/         # accuracy, image/question controls, diagnostics, artifact audits
+├── scripts/          # corpus generation, training and evaluation entry points
+├── notebooks/        # importable Kaggle smoke tests and experiment workflows
+├── docs/             # usage guides and separate milestone protocols/results
+└── tests/            # model, data, training, evaluation and infrastructure tests
 ```
 
 ---
@@ -946,9 +917,12 @@ Methods inspired by recurrent-depth architectures such as Huginn and stabilizati
 
 ---
 
-# Initial Model Scale
+# Possible Future Model Scale
 
-A reasonable first serious model might use approximately:
+The current baseline is the 172,928-parameter configuration in
+[`configs/relational_baseline.yaml`](configs/relational_baseline.yaml). The larger
+example below is an exploratory future configuration, not an implemented
+experiment budget or a requirement for useful capability work:
 
 ```text
 d_model:            512–768
@@ -967,7 +941,8 @@ visual tokens:      49
 parameter target:   50–150M
 ```
 
-Smaller 20–50M parameter configurations should be used during debugging.
+Continue debugging at the current small scale; any scale increase requires a
+separately specified capability objective and resource budget.
 
 ---
 
@@ -1045,11 +1020,15 @@ Success criterion:
 
 ## Milestone 4 — Dense comparison
 
-Train matched dense and recurrent multimodal models.
+Train dense and recurrent multimodal models under explicitly specified parameter
+and compute comparisons. Matching parameter count and matching computation are
+separate comparison regimes; neither should be silently assumed to match both.
 
 Success criterion:
 
-> Establish whether recurrent depth provides a measurable parameter-efficiency, compute-efficiency, reasoning, or generalization advantage.
+> Characterize parameter efficiency, compute efficiency, reasoning, and
+> generalization tradeoffs, reporting advantages, neutral results, and
+> disadvantages faithfully. A positive recurrence result is not required.
 
 ---
 
@@ -1148,18 +1127,7 @@ These projects provide useful reference implementations and experimental precede
 
 ---
 
-# Status
-
-**Phase:** Milestone 2 in progress — the fixed-depth relational baseline has been
-evaluated and diagnosed on Kaggle; direct grounding also showed a transfer gap.
-The geometry-diversity experiment is complete;
-[results and remaining limitations](docs/milestones/milestone2_geometry_diversity.md#results)
-are recorded separately.
-
-**Milestone 0:** Infrastructure and correctness, officially complete.
-
-**Milestone 1:** Complete for single-object color grounding on held-out layouts.
-See [results, evidence, and close-out review](docs/milestones/milestone1.md).
+# Implemented Infrastructure and Usage
 
 Validated model configuration, direct image patch embeddings, shared image/text
 sequence construction with learned positional and modality embeddings,
@@ -1227,8 +1195,8 @@ If formatting needs to change, run `ruff format .`.
 | `image_size`, `patch_size`, `num_channels` | 32, 8, 3 |
 | `dropout`, `layer_norm_eps` | 0.0, 1e-5 |
 
-The larger dimensions in Initial Model Scale describe later experiments, not the
-current defaults. `max_seq_len` limits the combined visual/text sequence length
+The larger dimensions in [Possible Future Model Scale](#possible-future-model-scale)
+are exploratory possibilities, not the current defaults. `max_seq_len` limits the combined visual/text sequence length
 in `MultimodalEmbedding`. `recurrence_depth` specifies the default number of
 applications of the shared recurrent stack; `RecurrentTransformerCore` accepts
 runtime overrides.

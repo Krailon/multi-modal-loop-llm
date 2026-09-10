@@ -106,7 +106,11 @@ control. See [control definitions and usage](../relational_training.md).
 
 These are practical capability gates, not statistical significance tests. The
 four validation geometries and their question/appearance variants are correlated;
-five shuffle seeds are not five independent training runs. This baseline provides
+additional appearance/question variants do not supply independent layout
+replications, and five shuffle seeds are not five independent training runs.
+Broader layout generalization requires a separately specified evaluation with
+more independent held-out geometries; this does not change the current protocol
+or authorize inference on the reserved test split. This baseline provides
 scoped synthetic-task evidence, not a claim about broad intelligence, persistent
 memory, real-image reasoning, or recurrence superiority.
 
@@ -140,6 +144,12 @@ increasingly confident validation mistakes, but does not identify their cause.
 No earlier checkpoint was selected and no extra epochs were added. Historical
 training loss averages predictions during optimization; final-checkpoint training
 accuracy and loss were not measured by this run.
+
+The final checkpoint characterizes the outcome of the prescribed training
+procedure, not the architecture's maximum attainable capability. Choosing an
+earlier checkpoint would be a different selection policy; lowest validation loss
+also need not coincide with highest accuracy. Preserve this baseline rather than
+substituting a retrospectively selected checkpoint.
 
 ### Frozen validation controls
 
@@ -187,7 +197,13 @@ answered correctly, demonstrating partial question-dependent behavior beyond
 the question-blind middle-color heuristic. Reliability remains inadequate:
 all six question texts are below 80%, and fewer than one in ten images has all
 four answers correct. The shuffled-question result near 37.5% is not itself
-evidence of perfect reasoning; that control retains answer coincidences.
+evidence of either perfect reasoning or absent question dependence. The control
+replaces questions while retaining the original answers as scoring targets. Even
+a perfect question-following model would receive credit only when the replacement
+question's answer matches the original target. A model that entirely ignores the
+question would retain its predictions under this intervention. Interpret the
+correct-versus-shuffled gap together with paired-question accuracy, not proximity
+to the coincidence baseline alone.
 
 ### Artifact audit and provenance
 
