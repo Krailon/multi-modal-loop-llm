@@ -131,5 +131,6 @@ specifying the next step. Milestone 2 remains incomplete; this diagnosis neither
 establishes a recurrence advantage nor authorizes further training or inference.
 
 The subsequent [size-intervention protocol](milestone2_size_intervention.md) now
-specifies this frozen-model evaluation, including edge-contact eligibility. It
-has not yet been run; this saved-prediction diagnosis remains unchanged.
+specifies this frozen-model evaluation, including edge-contact eligibility. Its
+[completed results](milestone2_size_intervention.md#results) establish strong
+size-dependent behavior. This saved-prediction diagnosis remains unchanged.

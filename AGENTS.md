@@ -364,9 +364,10 @@ per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. The se
 [training-budget results](docs/milestones/milestone2_training_budget.md#results)
 record the completed 5,760-update run: circle/square grounding improved and five
 of nine criteria pass. Reliable grounding remains incomplete. The
-[frozen size-intervention protocol](docs/milestones/milestone2_size_intervention.md)
-is specified but not yet run: evaluate the 5,760-update checkpoint on matched
-validation size variants, with explicit edge contact and no training or test inference. Preserve
+[completed size-intervention results](docs/milestones/milestone2_size_intervention.md#results)
+show strong size-dependent answers on matched validation variants; only 44/384
+images retain both circle/square answers correctly across all four size combinations. A
+matched size-variant training-data follow-up is recommended, not yet specified. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

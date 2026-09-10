@@ -18,8 +18,8 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   show improved circle/square grounding; five of nine criteria pass.
   A [focused diagnosis](docs/milestones/milestone2_focused_diagnosis.md)
   identifies remaining size-dependent swaps and layout-sensitive errors.
-  The [frozen size intervention](docs/milestones/milestone2_size_intervention.md)
-  is ready for Kaggle and has not yet been run.
+  The completed [size-intervention results](docs/milestones/milestone2_size_intervention.md#results)
+  demonstrate strong size-dependent answers; reliable grounding remains incomplete.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2173,8 +2173,8 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> Run the [size-intervention notebook](notebooks/kaggle_milestone2_size_intervention.ipynb)
-> under its [separate protocol](docs/milestones/milestone2_size_intervention.md).
+> Specify a controlled training-data follow-up using the
+> [size-intervention results](docs/milestones/milestone2_size_intervention.md#results).
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
