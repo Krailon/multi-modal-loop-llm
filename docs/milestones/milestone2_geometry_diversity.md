@@ -277,5 +277,6 @@ run and its original protocol before considering further data, optimization or
 image-frontend changes.
 
 The separate [training-budget follow-up](milestone2_training_budget.md) now fixes
-a fresh 5,760-update run on this exact corpus. It is specified but not yet run;
-the completed experiment and its original budget remain unchanged.
+a fresh 5,760-update run on this exact corpus. Its [completed results](milestone2_training_budget.md#results) show improved
+circle/square grounding and five of nine criteria passing. This geometry-diversity
+experiment and its original budget remain unchanged.

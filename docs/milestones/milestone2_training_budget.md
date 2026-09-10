@@ -2,7 +2,7 @@
 
 ## Status and question
 
-**Protocol specified; not yet run.** This is a separate experiment, preserving the
+**Experiment completed and audited; five of nine criteria passed.** This is a separate experiment, preserving the
 [completed geometry-diversity run](milestone2_geometry_diversity.md#results).
 Does more training improve circle/square grounding on the broader corpus, or
 mainly reinforce its partial solution? Geometry diversity raised validation
@@ -97,5 +97,112 @@ The default output archive is `milestone2_training_budget_artifacts.zip`:
 - `provenance/`: fixed protocol, reference reports, revision/runtime and hashes.
 - `logs/`: training and evaluation output.
 
-Staged reference weights are excluded. Bring the archive back for review; no
-results or completion claims are recorded until that run has been evaluated.
+Staged reference weights are excluded. The completed archive was reviewed locally;
+results are recorded below.
+
+
+## Results
+
+The completed `milestone2_training_budget_artifacts.zip` was reviewed against the
+fixed protocol. Training used fresh seed-0 weights for 5,760 updates and 184,320
+QA presentations on the unchanged 128-layout corpus. The run used PyTorch
+2.10.0+cu128, CUDA 12.8, one Tesla T4, float32, and two CPU threads.
+
+The archive reports clean revision
+`91748ecc0c03f9b00eda7a0aa0b61e7b8d71e375`.
+
+### Artifact audit
+
+Local checks verified artifact hashes, checkpoint progress, settings, exact corpus
+identity, deterministic exposure counts, saved prediction summaries, comparison
+arithmetic and acceptance criteria. The recorded training/validation history
+through step 2,880 exactly matches the reference history; this does not establish
+that intermediate model weights were compared. No new model or test inference
+was performed during review.
+
+- Manifest SHA256: `047ac5a844760a08ceb9d89dc7f1c5ed73ef157c85de86e2b58337e7b1e98975`
+- Final checkpoint SHA256: `2069297aabdff24489bf2be5ef2f0c5a53989f4daaea312cd55e51a72282f8bc`
+- Summary SHA256: `ab5295daf08e6844b2b011699f75275f968d5e811ba044d1d3b6100f5b4f8a23`
+- Controls SHA256: `f1a2d75fc2a986bb6825766e096d4e91f6b475370d041a0193f58b546141cb8c`
+- Comparison SHA256: `b7e5aad04c6f4fdfbc99a618f684e9222b4c57a36bf31a6259882d60014af6b3`
+
+### Final checkpoint
+
+| Metric | Training | Validation |
+| --- | ---: | ---: |
+| Overall accuracy | 77.51% | 74.71% |
+| Loss | 0.4351 | 0.5598 |
+| All-three accuracy | 57.92% | 56.08% |
+| Circle/square pair accuracy | 59.28% | 56.77% |
+| Identical circle/square predictions | 15.57% | 15.97% |
+
+| Criterion | Result | Required | Outcome |
+| --- | ---: | ---: | --- |
+| `train_circle` | 67.18% | ≥95% | Fail |
+| `train_square` | 68.09% | ≥95% | Fail |
+| `train_triangle` | 97.25% | ≥95% | Pass |
+| `validation_circle` | 65.28% | ≥90% | Fail |
+| `validation_square` | 66.32% | ≥90% | Fail |
+| `validation_triangle` | 92.53% | ≥90% | Pass |
+| `correct_minus_blank` | 49.71 pp | ≥30 pp | Pass |
+| `correct_minus_shuffled_images_mean` | 50.06 pp | ≥30 pp | Pass |
+| `correct_minus_shuffled_questions_mean` | 42.00 pp | ≥30 pp | Pass |
+
+Values are rounded for display; criteria use the unrounded report values. Triangle
+training and validation now pass, along with all three dependence controls.
+Circle and square training/validation accuracy remain below their thresholds.
+Blank-image accuracy is 25.00%, mean shuffled-image accuracy 24.65%, and mean
+shuffled-question accuracy 32.71%. These remain recipient-target controls.
+
+### Comparison with the 2,880-update reference
+
+Both runs use identical training and validation records. Validation changed as follows:
+
+| Measure | 2,880 updates | 5,760 updates |
+| --- | ---: | ---: |
+| Overall accuracy | 66.84% | 74.71% |
+| Circle accuracy | 52.08% | 65.28% |
+| Square accuracy | 59.03% | 66.32% |
+| Triangle accuracy | 89.41% | 92.53% |
+| Circle/square pair accuracy | 32.29% | 56.77% |
+| Identical circle/square predictions | 43.92% | 15.97% |
+| All-three accuracy | 31.25% | 56.08% |
+| Loss | 0.6160 | 0.5598 |
+
+Overall validation accuracy improved by 7.87 percentage points. The 24.48-point
+increase in correctly answering both circle/square questions, together with the
+fall in identical predictions for their different targets, shows that the gain
+includes the distinction this experiment was intended to investigate.
+
+Training accuracy rose from 70.14% to 77.51%. Circle and square training accuracy
+remain only 67.18% and 68.09%; triangle reaches 97.25%. Remaining errors therefore
+are not solely a held-out transfer problem.
+
+All four validation layouts improved, but unevenly:
+
+| Geometry | 2,880 updates | 5,760 updates |
+| --- | ---: | ---: |
+| `validation:g000` | 71.99% | 79.40% |
+| `validation:g001` | 67.59% | 80.09% |
+| `validation:g002` | 72.92% | 83.10% |
+| `validation:g003` | 54.86% | 56.25% |
+
+The fourth layout remains substantially harder than the other three.
+
+### Trajectory and interpretation
+
+Validation progress remained noisy. Accuracy peaked at 76.39% at step 5,472,
+then finished at **74.71% at step 5,760**. The final checkpoint remains the official
+result; the earlier peak is not substituted. Validation loss finished at 0.5598,
+compared with 0.4608 at step 5,472.
+
+Additional training improved both training fit and held-out circle/square
+behavior using the unchanged architecture. This supports retaining the current
+architecture as a working baseline; it does not uniquely identify the remaining
+learning bottleneck or establish that further training will resolve it.
+
+Five of nine direct-grounding criteria pass, but reliable grounding and
+**Milestone 2 remain incomplete**. This is one seed on four validation geometries,
+not broad layout-generalization evidence or a recurrence comparison. Preserve
+this run and its fixed budget. Selecting the next controlled follow-up is the
+next decision; no additional experiment or training extension is established here.

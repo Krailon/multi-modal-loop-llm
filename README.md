@@ -14,8 +14,8 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   circle/square reliability and per-shape accuracy criteria remain unresolved.
   See the [baseline report](docs/milestones/milestone2.md) and
   [latest results](docs/milestones/milestone2_geometry_diversity.md#results).
-  The [training-budget follow-up](docs/milestones/milestone2_training_budget.md)
-  is specified and ready for Kaggle; it has not yet been run.
+  The completed [training-budget results](docs/milestones/milestone2_training_budget.md#results)
+  show improved circle/square grounding; five of nine criteria pass.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2169,9 +2169,8 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> Run the [training-budget notebook](notebooks/kaggle_milestone2_training_budget.ipynb)
-> under its [separate protocol](docs/milestones/milestone2_training_budget.md), then
-> assess whether additional training improves circle/square grounding.
+> Select the next controlled follow-up using the completed
+> [training-budget results](docs/milestones/milestone2_training_budget.md#results).
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.

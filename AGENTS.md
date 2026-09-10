@@ -361,8 +361,10 @@ and poor layout transfer. The direct-grounding run reached 94.21% training and
 [geometry-diversity results](docs/milestones/milestone2_geometry_diversity.md#results)
 show improved held-out performance and all three dependence controls passing;
 per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. The separate
-[training-budget protocol](docs/milestones/milestone2_training_budget.md) specifies
-a fresh 5,760-update run on the same corpus; it has not yet been run. Preserve
+[training-budget results](docs/milestones/milestone2_training_budget.md#results)
+record the completed 5,760-update run: circle/square grounding improved and five
+of nine criteria pass. Reliable grounding remains incomplete; no further
+experiment or training extension is established. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an
