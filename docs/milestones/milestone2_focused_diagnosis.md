@@ -129,3 +129,7 @@ This is a recommendation, not a new evaluation or training protocol. Preserve th
 current architecture, training budgets, artifacts and reserved test split while
 specifying the next step. Milestone 2 remains incomplete; this diagnosis neither
 establishes a recurrence advantage nor authorizes further training or inference.
+
+The subsequent [size-intervention protocol](milestone2_size_intervention.md) now
+specifies this frozen-model evaluation, including edge-contact eligibility. It
+has not yet been run; this saved-prediction diagnosis remains unchanged.

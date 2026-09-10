@@ -363,8 +363,10 @@ show improved held-out performance and all three dependence controls passing;
 per-shape accuracy criteria remain unmet. Milestone 2 remains incomplete. The separate
 [training-budget results](docs/milestones/milestone2_training_budget.md#results)
 record the completed 5,760-update run: circle/square grounding improved and five
-of nine criteria pass. Reliable grounding remains incomplete; no further
-experiment or training extension is established. Preserve
+of nine criteria pass. Reliable grounding remains incomplete. The
+[frozen size-intervention protocol](docs/milestones/milestone2_size_intervention.md)
+is specified but not yet run: evaluate the 5,760-update checkpoint on matched
+validation size variants, with explicit edge contact and no training or test inference. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an
