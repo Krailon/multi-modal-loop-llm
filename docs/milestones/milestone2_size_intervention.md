@@ -243,3 +243,8 @@ is established by this report.
 Preserve the current architecture and all reference artifacts for that comparison.
 There are no new pass/fail gates, no recurrence-advantage claim, and no test-split
 inference. **Milestone 2 remains incomplete.**
+
+The subsequent [matched-size training protocol](milestone2_matched_size_training.md)
+now specifies this follow-up with margins and a unique union of original and
+variant training scenes. It has not yet been run; the frozen results above remain
+unchanged.

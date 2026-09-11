@@ -56,6 +56,15 @@ def train_shape_grounding(model, optimizer, manifest, training, budget, *, publi
     """
     train_data = ShapeColorDataset(manifest, "train")
     validation = ShapeColorDataset(manifest, "validation")
+    return train_shape_datasets(
+        model, optimizer, train_data, validation, training, budget, publish=publish
+    )
+
+
+def train_shape_datasets(
+    model, optimizer, train_data, validation, training, budget, *, publish=None
+):
+    """Shared update-limited loop; datasets supply pixels and direct-color supervision."""
     history = []
     steps = examples = epoch = offset = 0
     interval_loss = interval_examples = interval_steps = 0

@@ -366,8 +366,10 @@ record the completed 5,760-update run: circle/square grounding improved and five
 of nine criteria pass. Reliable grounding remains incomplete. The
 [completed size-intervention results](docs/milestones/milestone2_size_intervention.md#results)
 show strong size-dependent answers on matched validation variants; only 44/384
-images retain both circle/square answers correctly across all four size combinations. A
-matched size-variant training-data follow-up is recommended, not yet specified. Preserve
+images retain both circle/square answers correctly across all four size combinations. The
+[matched size-variant training protocol](docs/milestones/milestone2_matched_size_training.md)
+is specified but not yet run: retain all originals, add valid unique size variants
+with margins and fixed origins, and train fresh seed-0 weights for 5,760 updates. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an
