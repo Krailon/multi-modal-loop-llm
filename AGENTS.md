@@ -377,8 +377,13 @@ show 100% accuracy on all 1,728 QAs and correct answers across all four sizes fo
 144/144 families; all four criteria pass. The unchanged model first reached
 recorded perfect accuracy at update 864 (pass 16), maintained through the final
 2,160 updates (40 passes). This establishes training fit, not generalization or
-Milestone 2 completion. Frozen transfer evaluation on other training-source
-arrangements is a proposed next decision, not a specified experiment. Preserve
+Milestone 2 completion. The separate
+[frozen quartet transfer protocol](docs/milestones/milestone2_quartet_transfer.md)
+is specified but not yet run: pin the final quartet-fit checkpoint, evaluate all
+seven other complete training-source arrangements (12,096 QAs), and recheck the
+learned arrangement (1,728 QAs) against saved predictions. No training, reserved
+validation/test inference, or transfer accuracy gates. Keep reproduction failures
+visible and preserve their artifacts; exclude the control from transfer aggregates. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

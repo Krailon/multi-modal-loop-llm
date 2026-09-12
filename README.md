@@ -26,6 +26,8 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   The completed [quartet training-fit results](docs/milestones/milestone2_quartet_fit.md#results)
   show 100% accuracy and 144/144 correctly invariant families with the unchanged
   model. All four training-fit criteria pass; transfer remains unresolved.
+  The [frozen quartet transfer protocol](docs/milestones/milestone2_quartet_transfer.md)
+  is ready for Kaggle: seven unseen training-source arrangements and a reproduction control.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2180,9 +2182,10 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 Immediate objective — resolve remaining direct-grounding errors:
 
 > The [quartet training-fit result](docs/milestones/milestone2_quartet_fit.md#results)
-> establishes perfect fit on one balanced arrangement. The proposed next decision
-> is frozen-model transfer evaluation on other training-source arrangements unseen
-> by this checkpoint; that follow-up is not yet specified.
+> establishes perfect fit on one balanced arrangement. Run the
+> [frozen transfer notebook](notebooks/kaggle_milestone2_quartet_transfer.ipynb) under
+> its [separate protocol](docs/milestones/milestone2_quartet_transfer.md): seven
+> other training-source arrangements, a reproduction control, and no training.
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
