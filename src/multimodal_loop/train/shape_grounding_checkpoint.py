@@ -31,7 +31,7 @@ def tokenizer_metadata():
     }
 
 
-def _validate_progress(manifest, training, budget, history):
+def _validate_progress(manifest, training, budget, history, *, evaluation_name="validation"):
     if not isinstance(history, list) or not history:
         raise ValueError("checkpoint requires nonempty training history")
     steps = history[-1]["completed_steps"]
@@ -57,8 +57,8 @@ def _validate_progress(manifest, training, budget, history):
         }
         if any(type(row[k]) is not int or row[k] != v for k, v in expected.items()):
             raise ValueError("checkpoint pass/example progress disagrees with steps")
-        validation = row["validation"]
-        total = 3 * len(manifest.splits["validation"])
+        validation = row[evaluation_name]
+        total = 3 * len(manifest.splits[evaluation_name])
         if (
             validation["total"] != total
             or not 0 <= validation["correct"] <= total

@@ -371,8 +371,13 @@ images retain both circle/square answers correctly across all four size combinat
 record a negative result at 5,760 updates: validation fell from 74.71% to 70.08%,
 four of nine criteria pass, and only 48/384 images retain both answers correctly
 across all four size variants. Coverage, alignment and repetition changed together;
-this does not establish an architecture limitation. A small balanced training-fit
-sanity check is a proposed next decision, not a specified experiment. Preserve
+this does not establish an architecture limitation. The separate
+[bounded quartet training-fit protocol](docs/milestones/milestone2_quartet_fit.md)
+is specified but not yet run: one balanced training arrangement, 576 images,
+1,728 QAs, fresh seed-0 weights and 2,160 updates (40 passes), with unchanged model
+and optimizer. Evaluate training fit only; require ≥99% accuracy per shape and
+≥95% of families retaining both circle/square answers correctly across all four
+sizes. A pass does not establish generalization or complete Milestone 2. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

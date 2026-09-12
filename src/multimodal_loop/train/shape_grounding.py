@@ -62,9 +62,19 @@ def train_shape_grounding(model, optimizer, manifest, training, budget, *, publi
 
 
 def train_shape_datasets(
-    model, optimizer, train_data, validation, training, budget, *, publish=None
+    model,
+    optimizer,
+    train_data,
+    validation,
+    training,
+    budget,
+    *,
+    publish=None,
+    evaluation_name="validation",
 ):
     """Shared update-limited loop; datasets supply pixels and direct-color supervision."""
+    if evaluation_name not in ("validation", "training_fit"):
+        raise ValueError("unknown evaluation population")
     history = []
     steps = examples = epoch = offset = 0
     interval_loss = interval_examples = interval_steps = 0
@@ -88,7 +98,7 @@ def train_shape_datasets(
                 "examples": interval_examples,
                 "steps": interval_steps,
             },
-            "validation": asdict(metrics),
+            evaluation_name: asdict(metrics),
         }
         history.append(row)
         if publish is not None:
