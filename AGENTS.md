@@ -367,9 +367,12 @@ of nine criteria pass. Reliable grounding remains incomplete. The
 [completed size-intervention results](docs/milestones/milestone2_size_intervention.md#results)
 show strong size-dependent answers on matched validation variants; only 44/384
 images retain both circle/square answers correctly across all four size combinations. The
-[matched size-variant training protocol](docs/milestones/milestone2_matched_size_training.md)
-is specified but not yet run: retain all originals, add valid unique size variants
-with margins and fixed origins, and train fresh seed-0 weights for 5,760 updates. Preserve
+[completed matched-size training results](docs/milestones/milestone2_matched_size_training.md#results)
+record a negative result at 5,760 updates: validation fell from 74.71% to 70.08%,
+four of nine criteria pass, and only 48/384 images retain both answers correctly
+across all four size variants. Coverage, alignment and repetition changed together;
+this does not establish an architecture limitation. A small balanced training-fit
+sanity check is a proposed next decision, not a specified experiment. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

@@ -2,7 +2,8 @@
 
 ## Status and experimental question
 
-**Protocol specified; research training has not yet run.** The
+**Completed; negative result at the fixed update budget.** Validation accuracy
+fell and size-dependent confusion persists; see [results](#results). The
 [size intervention](milestone2_size_intervention.md#results) demonstrated strong
 size-dependent answers. Does systematic size variation within matched training
 arrangements improve circle/square grounding and invariance at the same update
@@ -130,5 +131,142 @@ The output `milestone2_matched_size_training_artifacts.zip` contains data and
 family derivation, the fresh checkpoint and history, exposure reports, complete
 predictions, original/added comparisons, size-intervention results, HTML previews,
 reference reports, runtime/revision provenance, hashes and logs. Staged reference
-weights are excluded. Bring the archive back for review; no research result is
-recorded yet.
+weights are excluded. The completed archive was reviewed as recorded below.
+
+
+## Results
+
+The completed `milestone2_matched_size_training_artifacts.zip` follows the fixed
+5,760-update / 184,320-presentation protocol. This is a negative result for the
+specified intervention and budget: validation accuracy regressed, and the matched
+resizing diagnostic shows little improvement in correct size invariance.
+
+### Provenance and audit
+
+The archive reports clean revision
+`08ba56756d1f5d4d47d9518d8812e844e5c284dd`, PyTorch 2.10.0+cu128, CUDA 12.8,
+one Tesla T4, float32 and two CPU threads. Model configuration, R=2, seed-0
+training settings, AdamW settings and the final budget match the protocol.
+
+Local review verified all 11 hashes in `provenance/final.json`, regenerated the
+expected corpus, checked checkpoint configuration, history and progress, and
+recomputed deterministic exposure counts. All 118,368 training and 1,728
+validation prediction records were checked against their scene labels and report
+summaries. The size-intervention metrics were recomputed from 5,760 saved
+predictions. No new model inference or test inference was performed during review.
+
+- Manifest SHA256: `25071dc462e1e8bdadee82ca7b0531cdde871c4f9735613532f41210c9192828`
+- Final checkpoint SHA256: `2bf8fcaf0e9cb0f2474555e2a795b8aca8db776fef8cd1478cf8836f553bd551`
+- Summary SHA256: `dcaea79f40a087979a3a24537f151fbdf310cac1225bd58210a54651c031289a`
+- Controls SHA256: `260967ed9215d8706d30be9010b9a9197c3caa3f04855959ada8bd8dc1cff3c7`
+- Comparison SHA256: `98389fdc8f6874b772b115ad019187ae708eb91b1d27d09f0d1462bd3791e736`
+- Size-intervention summary SHA256: `73acec2d8f1696a9cfe227fa911344925b063e8e131a61e9884e259cc7a8fa8b`
+
+The corpus retains all 18,432 originals and adds 21,024 unique images from 7,008
+eligible families, totaling 39,456 images. Margins and fixed origins are retained;
+vertical alignment alone is relaxed. Held-out records and ordering remain
+unchanged, with training origins separated from validation/test origins. Exact
+exposure counts match the protocol: 52,416 QAs seen once and 65,952 twice, averaging
+1.56 presentations versus 3.33 in the reference run.
+
+### Final checkpoint and reference comparison
+
+The reference is the completed [5,760-update training-budget run](milestone2_training_budget.md#results).
+Training comparisons below use the identical original 55,296 QAs. The expanded
+training corpus is reported separately to avoid changing the comparison denominator.
+
+| Measure | Reference | Matched-size training |
+| --- | ---: | ---: |
+| Original training subset accuracy | 77.51% | 77.39% |
+| Original training subset loss | 0.4351 | 0.4461 |
+| Original training circle/square pair accuracy | 59.28% | 58.36% |
+| Validation accuracy | 74.71% | 70.08% |
+| Validation loss | 0.5598 | 0.5692 |
+| Validation circle accuracy | 65.28% | 58.51% |
+| Validation square accuracy | 66.32% | 62.67% |
+| Validation triangle accuracy | 92.53% | 89.06% |
+| Validation circle/square pair accuracy | 56.77% | 49.65% |
+| Validation all-three accuracy | 56.08% | 45.66% |
+| Validation identical circle/square predictions | 15.97% | 20.31% |
+
+Expanded training accuracy is 92,605/118,368 = 78.23%, with loss 0.4248;
+added-subset accuracy is 78.97% on 63,072 QAs. Validation accuracy is
+1,211/1,728 = 70.08%, down 4.63 percentage points. There are no invalid predictions
+in either full training or validation diagnostics.
+
+| Criterion | Result | Required | Outcome |
+| --- | ---: | ---: | --- |
+| `train_circle` | 68.34% | ≥95% | Fail |
+| `train_square` | 68.90% | ≥95% | Fail |
+| `train_triangle` | 97.46% | ≥95% | Pass |
+| `validation_circle` | 58.51% | ≥90% | Fail |
+| `validation_square` | 62.67% | ≥90% | Fail |
+| `validation_triangle` | 89.06% | ≥90% | Fail |
+| `correct_minus_blank` | 45.08 pp | ≥30 pp | Pass |
+| `correct_minus_shuffled_images_mean` | 45.78 pp | ≥30 pp | Pass |
+| `correct_minus_shuffled_questions_mean` | 36.74 pp | ≥30 pp | Pass |
+
+Four of nine criteria pass, versus five in the reference. Training criteria use
+the full expanded corpus. All three dependence controls still pass: blank-image
+accuracy is 25.00%, mean shuffled-image accuracy 24.31%, and mean shuffled-question
+accuracy 33.34%. These are recipient-target controls; the results support use of
+both inputs, not reliable shape identification. Criteria use unrounded values.
+
+### Relative size and matched resizing
+
+Ordinary validation circle/square pair accuracy remains strongly size-dependent:
+
+| Relative size | Reference | Matched-size training |
+| --- | ---: | ---: |
+| Square smaller than circle | 24.48% | 9.38% |
+| Equal size | 51.04% | 50.00% |
+| Square larger than circle | 94.79% | 89.58% |
+
+Each row contains 192 validation images. In the smaller-square group, the new
+model answers the square question correctly on 42/192 and the circle question on
+39/192; 302 of the 303 errors select the other circle/square object's color.
+On the original training subset, smaller-square pair accuracy falls from 15.58%
+to 14.46%. On the expanded training set it is 21.09%, versus 92.01% for larger
+squares. The failure therefore is not confined to unseen layouts.
+
+The repeated [size intervention](milestone2_size_intervention.md#results) uses the
+same 384 eligible validation images and unchanged five conditions. Pair accuracy
+requires both circle and square answers to be correct.
+
+| Condition | Reference overall | New overall | Reference pair | New pair |
+| --- | ---: | ---: | ---: | ---: |
+| Original | 71.53% | 70.14% | 53.12% | 50.26% |
+| Circle 6, square 6 | 70.83% | 71.79% | 50.26% | 49.74% |
+| Circle 6, square 8 | 92.97% | 92.53% | 88.80% | 90.10% |
+| Circle 8, square 6 | 46.44% | 48.61% | 13.28% | 14.06% |
+| Circle 8, square 8 | 82.81% | 81.68% | 61.98% | 62.24% |
+
+Both answers remain correct across all four resized conditions on only
+48/384 images (12.50%), compared with 44/384 (11.46%). This small descriptive
+change does not demonstrate resolution of the size dependence. Diagnostic
+variants still permit edge contact, unlike training; the previously documented
+rendering and eligibility limitations continue to apply.
+
+The difficult ordinary validation layout `validation:g003` improves slightly
+from 56.25% to 57.64%, while accuracy on each of the other three layouts declines.
+It remains the weakest layout.
+
+### Trajectory, interpretation and next decision
+
+Validation accuracy peaks at 73.90% at step 5,472 and finishes at 70.08% at step
+5,760. The final checkpoint remains the reported result as specified; the peak
+does not replace it or authorize further training.
+
+Matched size variation under this budget did not produce reliable grounding or
+correct invariance. Coverage, alignment distribution and repetition frequency
+changed together, so their effects cannot be isolated. The result does not show
+that size variation can never help, nor uniquely identify an image-frontend or
+architecture limitation. Evidence is still limited to one seed and four
+validation layouts; no recurrence comparison was performed.
+
+A proposed next decision is a small, balanced training-fit sanity check on valid
+matched size quartets using the unchanged model. Its purpose would be to test
+whether the model can fit the distinction with repeated exposure before another
+broad data or architecture change. That experiment is not specified or authorized
+by this results record. Milestone 2 remains incomplete, and test inference remains
+reserved for a later authorized step. Preserve all protocols and artifacts.

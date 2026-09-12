@@ -20,8 +20,9 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   identifies remaining size-dependent swaps and layout-sensitive errors.
   The completed [size-intervention results](docs/milestones/milestone2_size_intervention.md#results)
   demonstrate strong size-dependent answers; reliable grounding remains incomplete.
-  The [matched size-variant training protocol](docs/milestones/milestone2_matched_size_training.md)
-  is ready for Kaggle and has not yet been run.
+  The completed [matched-size training results](docs/milestones/milestone2_matched_size_training.md#results)
+  are negative at the fixed budget: validation fell to 70.08%, four of nine
+  criteria pass, and size-dependent confusion persists.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2175,8 +2176,10 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> Run the [matched-size training notebook](notebooks/kaggle_milestone2_matched_size_training.ipynb)
-> under its [separate protocol](docs/milestones/milestone2_matched_size_training.md).
+> The [matched-size training result](docs/milestones/milestone2_matched_size_training.md#results)
+> did not resolve size-dependent confusion. The proposed next decision is a small,
+> balanced training-fit sanity check with the unchanged model; its protocol is not
+> yet specified.
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
