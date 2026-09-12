@@ -384,13 +384,15 @@ but only 31.84% accuracy on 12,096 transfer QAs and 62/1,008 families correct ac
 all four sizes. Transfer remains weak, including for triangles. No new accuracy
 gates or reserved validation/test inference were used. Location-specific learning
 is a possible explanation, not an established mechanism. The separate
-[four-arrangement training protocol](docs/milestones/milestone2_multi_arrangement.md)
-is specified but not yet run: train fresh seed-0 weights on learned/transfer_02/
-transfer_04/transfer_06 for 8,640 updates (40 presentations per QA), monitor training
-fit only, and evaluate final transfer on transfer_01/03/05/07. Keep the architecture
-and optimizer unchanged; enforce training criteria per arrangement and keep
-transfer descriptive. Comparisons use the same four arrangements, not the prior
-seven-arrangement aggregate. Fourfold updates confound diversity and compute. Preserve
+[completed four-arrangement results](docs/milestones/milestone2_multi_arrangement.md#results)
+show perfect fit on all 6,912 training QAs and 576/576 families, with all 16 criteria
+passing. First recorded perfect fit is at pass 18, maintained through pass 40.
+Same-population transfer improves from 33.71% to 44.34% and 39/576 to 78/576 correct
+families, but 72 of those 78 occur in transfer_01; transfer remains uneven. Loss
+worsens from 4.80 to 5.75. Comparisons use the same four arrangements, not the prior
+seven-arrangement aggregate. Fourfold updates confound diversity and compute.
+Broader position-transfer work is a proposed next decision, not a specified
+experiment. Milestone 2 remains incomplete. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

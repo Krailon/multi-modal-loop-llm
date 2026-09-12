@@ -2,7 +2,8 @@
 
 ## Status and question
 
-**Protocol specified; research training has not yet run.** The
+**Completed; perfect training fit with improved but uneven transfer.** See
+[results](#results). The
 [quartet-fit run](milestone2_quartet_fit.md#results) achieved perfect training fit,
 but its [frozen transfer](milestone2_quartet_transfer.md#results) was weak. Can
 learning across several balanced arrangements, with substantial repeated exposure,
@@ -158,5 +159,122 @@ Download `milestone2_multi_arrangement_artifacts.zip` for review. It contains th
 fresh checkpoint, data and reference provenance, protocol, settings, exposure
 counts, history, final predictions, per-arrangement/aggregate metrics, matched
 comparisons, inspection HTML, hashes, logs and runtime/revision records. Reference
-weights are excluded. No research result is recorded yet; local execution is
-limited to selection preflight, correctness tests and small smoke fixtures.
+weights are excluded. The completed archive was reviewed as recorded below.
+
+
+## Results
+
+The completed `milestone2_multi_arrangement_artifacts.zip` achieves perfect fit
+on all four training arrangements. Transfer improves on the identical four
+reserved arrangements, but most of the gain is concentrated in `transfer_01`.
+Reliable transfer across positions remains unresolved.
+
+### Provenance and audit
+
+The archive reports clean revision `d44153fb41055e63cdc6833c14041ed129f7e711`, PyTorch
+2.10.0+cu128, CUDA 12.8, one Tesla T4, float32 and two CPU threads. Fresh seed-0
+training completed **8,640 updates / 276,480 QA presentations / 40 passes** with
+the specified model, R=2 and optimizer. Every training QA received 40 presentations.
+
+Local review verified all 18 artifact hashes, regenerated the fixed corpus,
+checked exposure counts and checkpoint progress, and validated all 13,824 saved
+predictions against their arrangement labels. Per-arrangement metrics, training
+and transfer aggregates, training criteria and matched reference comparisons were
+recomputed from saved records. No new model inference was performed during
+review. No project validation/test inference was performed by this experiment.
+
+- Manifest SHA256: `ce16b936ce4ffcecb231794d9541a3c9d39461fef861c9e02349f9e4d68de8c7`
+- Final checkpoint SHA256: `4e2adf98a2fd7ca2ba458c1a99a05973c5744b1db2a0b57e1810af2c56b8be61`
+- Summary SHA256: `367b04f0c48120eea105b90d1664906e1a38890849dcc732397177555aee1970`
+- Predictions SHA256: `1d616e65d1721b726e287d19b9d6b08040cd28860958e962a842b978c55239c8`
+- Comparison SHA256: `6ebd8a3cdec894c803cc149d3dcc902da9d5a466cd5c526a0851f70475ab8ade`
+
+### Training fit and trajectory
+
+All **6,912/6,912 training questions** are correct. Every training arrangement
+has 100% accuracy for square, circle and triangle, and all **576/576 families**
+retain both circle/square answers correctly across all four sizes. All **16/16
+training-fit criteria pass**, assessed per arrangement rather than only in aggregate.
+Final training loss is 0.0000156083.
+
+The first recorded perfect training evaluation occurs at **update 3,888 / pass
+18**, and accuracy remains 100% at every subsequent recorded evaluation through
+pass 40. Monitoring occurred once per pass, so this identifies the first recorded
+perfect score, not the exact update at which every answer became correct. The
+final checkpoint remains the specified result; no earlier checkpoint was selected.
+
+### Same-population transfer comparison
+
+Both columns below refer to **transfer_01/03/05/07: 6,912 questions and 576
+families**. The reference is the saved single-arrangement model evaluated on these
+same four arrangements. Its accuracy is therefore **33.71%**, not the **31.84%**
+previously reported across all seven transfer arrangements. Neither aggregate
+includes the new training arrangements.
+
+| Measure | Single-arrangement reference | Four-arrangement model |
+| --- | ---: | ---: |
+| Overall accuracy | 33.71% | 44.34% |
+| Circle accuracy | 29.60% | 45.96% |
+| Square accuracy | 43.19% | 49.65% |
+| Triangle accuracy | 28.34% | 37.41% |
+| Circle/square pair accuracy | 13.19% | 27.47% |
+| Families correct across all sizes | 6.77% | 13.54% |
+| Loss | 4.795463 | 5.748286 |
+
+Transfer accuracy improves from **2,330/6,912 to 3,065/6,912**, a gain of **10.63
+percentage points**. Correct-family counts rise from **39/576 to 78/576**. Loss
+nevertheless worsens from 4.80 to 5.75: higher answer accuracy did not improve the
+average negative log probability of the correct answer. There are no transfer
+accuracy gates in this experiment.
+
+### Variation across transfer arrangements
+
+Each arrangement contains 1,728 questions and 144 families.
+
+| Arrangement | Reference accuracy | New accuracy | New circle | New square | New triangle | New correct families |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `transfer_01` | 43.81% | 78.99% | 68.40% | 81.42% | 87.15% | 72/144 |
+| `transfer_03` | 32.29% | 25.93% | 31.25% | 36.28% | 10.24% | 2/144 |
+| `transfer_05` | 27.66% | 29.46% | 45.31% | 31.60% | 11.46% | 0/144 |
+| `transfer_07` | 31.08% | 43.00% | 38.89% | 49.31% | 40.80% | 4/144 |
+
+**72 of the 78 correctly invariant transfer families occur in `transfer_01`.**
+Across the other three arrangements, only **6/432 families (1.39%)** retain both
+answers correctly across all four sizes. `transfer_03` regresses, and triangle
+accuracy is particularly low on `transfer_03` and `transfer_05`. The aggregate
+improvement therefore does not establish broad position transfer.
+
+### Matched correctness changes
+
+Each row compares identical questions, colors and size conditions in the same
+arrangement between the reference and new models. Prediction changes can include
+wrong-to-wrong changes and are distinct from correctness transitions.
+
+| Arrangement | Prediction changes | Correct→wrong | Wrong→correct | Both correct | Both wrong |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `transfer_01` | 981 | 125 | 733 | 632 | 238 |
+| `transfer_03` | 1,048 | 373 | 263 | 185 | 907 |
+| `transfer_05` | 1,213 | 327 | 358 | 151 | 892 |
+| `transfer_07` | 1,104 | 244 | 450 | 293 | 741 |
+
+### Interpretation and next decision
+
+The unchanged architecture and optimizer can fit several balanced arrangements
+with repeated exposure. Transfer improves, substantially at one arrangement,
+but remains uneven and unreliable elsewhere. Location-specific visual learning
+remains a possible explanation, not an established internal mechanism.
+
+This run uses fourfold updates and QA presentations relative to the
+single-arrangement fit run. Diversity and additional computation therefore remain
+confounded; improvement cannot be attributed to diversity alone. Prior scores
+were known before this exploratory experiment, and the transfer population is
+part of the project's training-source corpus, not an untouched test split.
+
+The proposed next decision is work targeting broader position transfer with an
+explicit data and compute budget. Further training on these same four arrangements
+alone would be less informative given their sustained perfect fit. No follow-up
+experiment is specified or run by this results record.
+
+Milestone 2 remains incomplete. No recurrence advantage has been tested. Preserve
+all prior protocols and artifacts, and reserve test inference for a later
+authorized step.
