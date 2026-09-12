@@ -378,12 +378,14 @@ show 100% accuracy on all 1,728 QAs and correct answers across all four sizes fo
 recorded perfect accuracy at update 864 (pass 16), maintained through the final
 2,160 updates (40 passes). This establishes training fit, not generalization or
 Milestone 2 completion. The separate
-[frozen quartet transfer protocol](docs/milestones/milestone2_quartet_transfer.md)
-is specified but not yet run: pin the final quartet-fit checkpoint, evaluate all
-seven other complete training-source arrangements (12,096 QAs), and recheck the
-learned arrangement (1,728 QAs) against saved predictions. No training, reserved
-validation/test inference, or transfer accuracy gates. Keep reproduction failures
-visible and preserve their artifacts; exclude the control from transfer aggregates. Preserve
+[completed quartet transfer results](docs/milestones/milestone2_quartet_transfer.md#results)
+show perfect learned-arrangement reproduction with zero prediction disagreements,
+but only 31.84% accuracy on 12,096 transfer QAs and 62/1,008 families correct across
+all four sizes. Transfer remains weak, including for triangles. No new accuracy
+gates or reserved validation/test inference were used. Location-specific learning
+is a possible explanation, not an established mechanism. Balanced multi-arrangement
+training with repeated exposure is a proposed next decision, not a specified
+experiment. Exclude the learned control from transfer aggregates. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an
