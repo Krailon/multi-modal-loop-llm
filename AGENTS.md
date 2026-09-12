@@ -383,9 +383,14 @@ show perfect learned-arrangement reproduction with zero prediction disagreements
 but only 31.84% accuracy on 12,096 transfer QAs and 62/1,008 families correct across
 all four sizes. Transfer remains weak, including for triangles. No new accuracy
 gates or reserved validation/test inference were used. Location-specific learning
-is a possible explanation, not an established mechanism. Balanced multi-arrangement
-training with repeated exposure is a proposed next decision, not a specified
-experiment. Exclude the learned control from transfer aggregates. Preserve
+is a possible explanation, not an established mechanism. The separate
+[four-arrangement training protocol](docs/milestones/milestone2_multi_arrangement.md)
+is specified but not yet run: train fresh seed-0 weights on learned/transfer_02/
+transfer_04/transfer_06 for 8,640 updates (40 presentations per QA), monitor training
+fit only, and evaluate final transfer on transfer_01/03/05/07. Keep the architecture
+and optimizer unchanged; enforce training criteria per arrangement and keep
+transfer descriptive. Comparisons use the same four arrangements, not the prior
+seven-arrangement aggregate. Fourfold updates confound diversity and compute. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
 Recurrence comparisons may follow, but an

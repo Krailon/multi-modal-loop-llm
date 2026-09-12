@@ -29,6 +29,8 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   The completed [quartet transfer results](docs/milestones/milestone2_quartet_transfer.md#results)
   reproduce the learned arrangement perfectly, but transfer accuracy is 31.84%
   and only 62/1,008 families remain correct across all four sizes.
+  The [four-arrangement training protocol](docs/milestones/milestone2_multi_arrangement.md)
+  is ready for Kaggle: 8,640 updates, 40 presentations per question, and final transfer evaluation.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2183,9 +2185,10 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 Immediate objective — resolve remaining direct-grounding errors:
 
 > The [frozen transfer result](docs/milestones/milestone2_quartet_transfer.md#results)
-> shows weak transfer despite perfect reproduction. The proposed next decision is
-> balanced multi-arrangement training with repeated exposure and explicit budgets;
-> that follow-up is not yet specified.
+> shows weak transfer despite perfect reproduction. Run the
+> [four-arrangement notebook](notebooks/kaggle_milestone2_multi_arrangement.ipynb) under
+> its [fixed protocol](docs/milestones/milestone2_multi_arrangement.md): train on four
+> balanced arrangements for 40 passes, then evaluate transfer to the other four.
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
