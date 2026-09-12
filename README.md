@@ -23,8 +23,9 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   The completed [matched-size training results](docs/milestones/milestone2_matched_size_training.md#results)
   are negative at the fixed budget: validation fell to 70.08%, four of nine
   criteria pass, and size-dependent confusion persists.
-  The [bounded quartet training-fit check](docs/milestones/milestone2_quartet_fit.md)
-  is ready for Kaggle: one balanced arrangement, unchanged model, 40 passes.
+  The completed [quartet training-fit results](docs/milestones/milestone2_quartet_fit.md#results)
+  show 100% accuracy and 144/144 correctly invariant families with the unchanged
+  model. All four training-fit criteria pass; transfer remains unresolved.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2178,11 +2179,10 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> The [matched-size training result](docs/milestones/milestone2_matched_size_training.md#results)
-> did not resolve size-dependent confusion. Run the
-> [quartet training-fit notebook](notebooks/kaggle_milestone2_quartet_fit.ipynb) under
-> its [fixed protocol](docs/milestones/milestone2_quartet_fit.md): 576 images, 2,160
-> updates, training-fit evaluation only.
+> The [quartet training-fit result](docs/milestones/milestone2_quartet_fit.md#results)
+> establishes perfect fit on one balanced arrangement. The proposed next decision
+> is frozen-model transfer evaluation on other training-source arrangements unseen
+> by this checkpoint; that follow-up is not yet specified.
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.

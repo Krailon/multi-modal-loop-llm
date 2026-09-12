@@ -2,7 +2,9 @@
 
 ## Status and question
 
-**Protocol specified; research training has not yet run.** The
+**Completed; all four training-fit criteria passed.** The unchanged model achieved
+100% accuracy and correct answers across all four sizes for every family; see
+[results](#results). The
 [matched-size training result](milestone2_matched_size_training.md#results) did not
 resolve size-dependent circle/square confusion at its fixed budget. Can the
 unchanged model reliably fit a small, balanced collection of valid matched size
@@ -136,5 +138,95 @@ randomness or provide resume. Existing checkpoint formats remain unchanged.
 The archive `milestone2_quartet_fit_artifacts.zip` contains data/provenance,
 `training/last.pt`, settings, history, exposure counts, final training-fit
 predictions and summary, family diagnostics, inspection HTML, hashes and logs.
-Reference weights are excluded. Bring the archive back for review; this document
-records a protocol, not a completed research result.
+Reference weights are excluded. The completed archive was reviewed as recorded below.
+
+
+## Results
+
+The completed `milestone2_quartet_fit_artifacts.zip` passes all four specified
+training-fit criteria. Fresh seed-0 weights reached perfect accuracy on the
+balanced training population with the unchanged model, R=2 and optimizer.
+Training completed the fixed 2,160 updates / 69,120 QA presentations: 40 complete
+passes over 576 images and 1,728 questions.
+
+### Provenance and audit
+
+The archive reports clean revision
+`95c1d24e6b1f9f95b4b809ca25794527448f4705`, PyTorch 2.10.0+cu128, CUDA 12.8,
+one Tesla T4, float32 and two CPU threads.
+
+Local review verified all 14 hashes in `provenance/final.json`, regenerated the
+specified subset, checked its derivation and exact 40-visit exposure counts, and
+validated checkpoint configuration, history and training progress against the
+fixed protocol. All 1,728 saved predictions were checked against scene labels and
+summary metrics. Family correctness and acceptance criteria were independently
+recomputed from those records. No new model inference was performed during review;
+the experiment evaluated training fit only, with no validation or test inference.
+
+- Manifest SHA256: `86bdb774cef97e6b76752f016edd2b73473e8c989b77a7e2cedcb4e295894180`
+- Final checkpoint SHA256: `3e18600b01fcf94514d7a2aed9a1e4bf4d5b21958bd208966e57dee056f1fee4`
+- Summary SHA256: `842b57c8edd9606db37fe49d8a8f02b1e6d487d914ffad3566de332e40d5fd9d`
+- Predictions SHA256: `e9f4898240012e0dd73241ca2b95463a701ef9ac0ead71a240ff709b5e86a41a`
+
+### Final checkpoint
+
+| Measure | Result | Required | Outcome |
+| --- | ---: | ---: | --- |
+| Square accuracy | 576/576 — 100% | ≥99% | Pass |
+| Circle accuracy | 576/576 — 100% | ≥99% | Pass |
+| Triangle accuracy | 576/576 — 100% | ≥99% | Pass |
+| Families with both circle/square answers correct across all four sizes | 144/144 — 100% | ≥95% | Pass |
+
+Overall accuracy is **1,728/1,728 (100%)**, with final loss **0.000406125**.
+All three answers are correct on every image (576/576), and there are no invalid
+predictions. The four criteria are assessed on the final checkpoint, without
+rounding or substituting an earlier checkpoint.
+
+| Circle size / square size | Overall accuracy | Both circle/square answers correct |
+| --- | ---: | ---: |
+| 6 / 6 | 432/432 — 100% | 144/144 — 100% |
+| 6 / 8 | 432/432 — 100% | 144/144 — 100% |
+| 8 / 6 | 432/432 — 100% | 144/144 — 100% |
+| 8 / 8 | 432/432 — 100% | 144/144 — 100% |
+
+This includes the smaller-square/larger-circle combination that remained
+particularly difficult in previous experiments. Every family satisfies correct
+invariance across the four sizes; stable wrong predictions do not contribute.
+
+### Learning trajectory
+
+| Update | Completed passes | Training-fit accuracy |
+| --- | ---: | ---: |
+| 324 | 6 | 54.69% |
+| 540 | 10 | 82.35% |
+| 648 | 12 | 92.94% |
+| 702 | 13 | 99.31% |
+| 864 | 16 | 100% |
+| 2,160 | 40 | 100% |
+
+The first recorded perfect evaluation is at **update 864 / pass 16**. Accuracy
+remains 100% at every subsequent recorded evaluation through pass 40. Loss falls
+from 0.004539 at update 864 to 0.000406125 at the final checkpoint. Monitoring was
+performed once per pass, so this identifies the first recorded perfect score,
+not the exact update at which every answer became correct.
+
+### Interpretation and next decision
+
+The unchanged direct-patch model and optimizer can fit this balanced shape/size
+distinction on repeatedly seen examples. The successful result narrows the
+problem: the earlier failures do not demonstrate that the architecture cannot
+represent correct answers for these combinations or that the training procedure
+cannot learn them at all.
+
+Transfer across arrangements remains unresolved. Perfect training fit can rely on
+location-specific patterns or memorization; it does not establish a general
+shape rule. This experiment changes layout diversity and repetition relative to
+the larger-corpus experiments and does not isolate the cause of their failures.
+No recurrence advantage was tested. Milestone 2 remains incomplete.
+
+The proposed next decision is a frozen-model transfer check on complete quartets
+from other training-source arrangements that this model never saw. Those scenes
+would be unseen by this checkpoint, but remain part of the broader project's
+training source; they should not be described as a new untouched test split.
+That follow-up is not specified or run by this results record. Preserve all
+protocols and artifacts, and reserve test inference for a later authorized step.
