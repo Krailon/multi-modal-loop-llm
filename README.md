@@ -2189,11 +2189,11 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — improve grounding in the recurrent model:
 
-> The [completed CNN baseline](docs/milestones/milestone2_cnn_baseline.md#results)
-> achieves perfect direct grounding and transfer on all four evaluated arrangements.
-> The proposed next experiment tests a small convolutional image stem in the
-> recurrent transformer; that follow-up is not yet specified. Preserve existing
-> protocols, artifacts, and recorded validation/test scenes.
+> The [convolutional-stem protocol](docs/milestones/milestone2_conv_stem.md) tests
+> learned convolutional image tokens in the recurrent transformer on the same
+> corpus, R=2 and 8,640-update exposure budget. The implementation and
+> [Kaggle notebook](notebooks/kaggle_milestone2_conv_stem.ipynb) are ready; the run
+> is pending. Preserve prior results and reserved validation/test separation.
 
 Scale comes later.
 

@@ -404,8 +404,12 @@ arrangement reaches 100%.
 The corpus supports direct grounding with this CNN; multiple architectural
 components differ, so do not attribute the result to one component or recurrence.
 Exposure matches at 8,640 updates / 40 presentations per QA; compute differs.
-Preserve both models' artifacts and split separation. A convolutional image stem
-for the recurrent transformer is the proposed next experiment, not yet specified.
+Preserve both models' artifacts and split separation. The separate [convolutional-stem protocol](docs/milestones/milestone2_conv_stem.md)
+is implemented but not yet run: replace image projection with five convolutions
+and regional pooling to 16 tokens. Keep R=2 and the same 8,640 updates / 40 QA
+presentations. Train fresh weights; preserve non-image baseline initialization.
+Compare both saved references without new reference inference. Parameters and
+compute increase; no recurrence advantage or component-level cause is established.
 Milestone 2 remains incomplete; relational reasoning and broader evaluation remain.
 Recurrence comparisons may follow, but an
 advantage is not a milestone completion gate. Later research priorities can evolve with capability

@@ -22,24 +22,37 @@ CHECKPOINT_SHA256 = "4e2adf98a2fd7ca2ba458c1a99a05973c5744b1db2a0b57e1810af2c56b
 
 
 def read_cnn_reference(source, *, smoke=False):
+    return read_arrangement_reference(
+        source,
+        prefix="milestone2_multi_arrangement",
+        expected_hashes=REFERENCE_HASHES,
+        checkpoint_sha256=CHECKPOINT_SHA256,
+        smoke=smoke,
+    )
+
+
+def read_arrangement_reference(source, *, prefix, expected_hashes, checkpoint_sha256, smoke=False):
+    """Audit a pinned complete arrangement report without loading its model."""
+    if type(smoke) is not bool:
+        raise ValueError("smoke must be boolean")
     source = Path(source)
-    names = [*REFERENCE_HASHES, "provenance/final.json"]
+    names = [*expected_hashes, "provenance/final.json"]
     if source.is_dir():
-        root = source if (source / names[0]).is_file() else source / "milestone2_multi_arrangement"
+        root = source if (source / names[0]).is_file() else source / prefix
         raw = {n: (root / n).read_bytes() for n in names}
     else:
         with zipfile.ZipFile(source) as archive:
             raw = {}
             for name in names:
-                member = "milestone2_multi_arrangement/" + name
+                member = prefix + "/" + name
                 if archive.namelist().count(member) != 1:
                     raise ValueError("reference requires exactly one copy of each artifact")
                 raw[name] = archive.read(member)
-    hashes = {n: sha256(raw[n]).hexdigest() for n in REFERENCE_HASHES}
+    hashes = {n: sha256(raw[n]).hexdigest() for n in expected_hashes}
     final = json.loads(raw["provenance/final.json"])
     if any(final.get(n) != h for n, h in hashes.items()):
         raise ValueError("reference artifact hash mismatch")
-    if not smoke and hashes != REFERENCE_HASHES:
+    if not smoke and hashes != expected_hashes:
         raise ValueError("reference identity mismatch")
     manifest = parse_multi_arrangement(raw["data/manifest.json"].decode())
     summary = json.loads(raw["diagnosis/summary.json"])
@@ -49,7 +62,7 @@ def read_cnn_reference(source, *, smoke=False):
         or (
             not smoke
             and (
-                summary["checkpoint_sha256"] != CHECKPOINT_SHA256
+                summary["checkpoint_sha256"] != checkpoint_sha256
                 or summary["smoke"]
                 or summary["completed_steps"] != 8640
             )
