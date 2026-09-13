@@ -13,7 +13,7 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   improved direct grounding and passed all three dependence controls, but
   circle/square reliability and per-shape accuracy criteria remain unresolved.
   See the [baseline report](docs/milestones/milestone2.md) and
-  [latest results](docs/milestones/milestone2_geometry_diversity.md#results).
+  [geometry-diversity results](docs/milestones/milestone2_geometry_diversity.md#results).
   The completed [training-budget results](docs/milestones/milestone2_training_budget.md#results)
   show improved circle/square grounding; five of nine criteria pass.
   A [focused diagnosis](docs/milestones/milestone2_focused_diagnosis.md)
@@ -32,6 +32,10 @@ An experimental multimodal recurrent-depth transformer trained from scratch.
   The completed [four-arrangement results](docs/milestones/milestone2_multi_arrangement.md#results)
   achieve perfect training fit and improve same-population transfer from 33.71%
   to 44.34%, but 72/78 correctly invariant transfer families occur in one arrangement.
+  The completed [CNN baseline results](docs/milestones/milestone2_cnn_baseline.md#results)
+  reach 100% training and transfer accuracy, including all 576 transfer families,
+  on the same corpus and exposure budget. This independent control does not yet
+  establish reliable grounding in the recurrent model or complete Milestone 2.
 
 The current Milestone 2 baseline has **172,928 parameters**, uses **32×32 images**
 with **16 image patch tokens**, and runs at **recurrence depth 2**. These are small
@@ -2183,15 +2187,13 @@ for the recorded experiment; its
 [completed results](docs/milestones/milestone2_geometry_diversity.md#results) build on
 the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#results).
 
-Immediate objective — resolve remaining direct-grounding errors:
+Immediate objective — improve grounding in the recurrent model:
 
-> The [CNN baseline protocol and focused literature review](docs/milestones/milestone2_cnn_baseline.md)
-> specify an independent model trained from scratch on the same four arrangements
-> for 8,640 updates and 40 presentations per QA. The implementation and
-> [Kaggle notebook](notebooks/kaggle_milestone2_cnn_baseline.ipynb) are ready; the
-> research run is pending. This tests direct grounding and layout transfer with
-> matched exposure, not matched compute or a recurrence comparison.
-> Preserve existing protocols, artifacts, and recorded validation/test scenes.
+> The [completed CNN baseline](docs/milestones/milestone2_cnn_baseline.md#results)
+> achieves perfect direct grounding and transfer on all four evaluated arrangements.
+> The proposed next experiment tests a small convolutional image stem in the
+> recurrent transformer; that follow-up is not yet specified. Preserve existing
+> protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.
 

@@ -2,7 +2,8 @@
 
 ## Status and decision
 
-**Specified and implemented; research run pending.** This is a small, independent
+**Completed; perfect training fit and transfer on all four evaluated arrangements.**
+See [results](#results). This is a small, independent
 vision baseline for the current direct shape-to-color task, trained from scratch
 on the exact [four-arrangement corpus](milestone2_multi_arrangement.md). It does
 not change the recurrent transformer or establish relational reasoning.
@@ -160,4 +161,117 @@ plus correct-family counts, rather than only an aggregate.
 
 Local correctness checks cover input/target separation, gradients, deterministic
 sampling, protocol rejection, frozen checkpoint predictions, reference audit and
-metric compatibility. Research results will be recorded here after the Kaggle run.
+metric compatibility. The completed research run is recorded below.
+
+## Results
+
+The completed `milestone2_cnn_baseline_artifacts.zip` records **100% accuracy on
+both training and transfer**, including every queried shape, arrangement and size
+condition. All 576 families in each population retain both circle/square answers
+correctly across all four sizes. The improvement is spread across all four
+transfer arrangements, resolving the uneven performance seen in the transformer
+reference for this direct-grounding comparison.
+
+### Provenance and audit
+
+The archive reports clean revision `ae293cb31c05c5d11387061e448e99e0ea3f8ceb`,
+PyTorch 2.10.0+cu128, CUDA 12.8, one Tesla T4, float32 and two CPU threads.
+Fresh seed-0 training used the specified 145,329-parameter CNN and AdamW settings.
+It completed **8,640 updates / 276,480 QA presentations / 40 passes**, with
+exactly 40 presentations per training QA.
+
+Local review verified all 18 artifact hashes, rederived the pinned corpus,
+checked checkpoint progress and optimizer settings, and reproduced exposure
+counts. All 13,824 saved predictions were checked against their arrangement
+labels. Per-arrangement metrics, training/transfer aggregates, family correctness,
+all training criteria and matched reference comparisons were recomputed from
+saved records. The reference is the completed four-arrangement transformer.
+No new model inference was performed during review. This experiment performed
+no inference on the project's reserved validation/test populations.
+
+- Manifest SHA256: `ce16b936ce4ffcecb231794d9541a3c9d39461fef861c9e02349f9e4d68de8c7`
+- CNN checkpoint SHA256: `9e47a412cef98c24d7d5ea03a028e3c499d9d20340db0900876137232b82637d`
+- Summary SHA256: `11939f4e4b671efe20746a3b94c11395992064f39b41d7e77cebc26767becd54`
+- Predictions SHA256: `0868e98a14d54af9997c29cc824b83adbd4b356cf6f4e77de9cadb237bf48019`
+- Comparison SHA256: `426515e8642a7d59613f2df785b6e3415bfe3016e65aca3081c5a25c7fc815c3`
+
+Training and monitoring took **373.71 seconds**, approximately 6 minutes 14 seconds.
+Peak allocated CUDA memory was **104,920,064 bytes** (100.06 MiB); peak reserved
+memory was **136,314,880 bytes** (130 MiB). These measurements cover training and
+monitoring, not the separate final diagnosis. Equal updates and exposure do not
+establish equal compute or a measured speed advantage over the transformer.
+
+### Training fit and trajectory
+
+The CNN correctly answers **6,912/6,912 training questions**, with **576/576
+correctly invariant families**. Every training arrangement has 100% accuracy for
+circle, square and triangle; all **16/16 training-fit criteria pass**. Final
+training loss is 0.0000211296.
+
+The first recorded perfect training evaluation occurs at **update 1,728 / pass 8**,
+maintained at every subsequent recorded evaluation through pass 40. Monitoring
+occurred once per pass, so this is the first recorded perfect score, not the exact
+update at which all answers became correct. The transformer reference first
+reached recorded perfect training accuracy at pass 18. Transfer was evaluated
+only at the final checkpoint; its learning trajectory is unknown. No earlier
+checkpoint was selected.
+
+### Same-population transfer comparison
+
+Both columns refer to **transfer_01/03/05/07: 6,912 questions and 576 families**.
+The reference is the four-arrangement transformer trained on the identical
+training population with the same updates and QA exposure.
+
+| Measure | Four-arrangement transformer | CNN |
+| --- | ---: | ---: |
+| Overall accuracy | 44.34% (3,065/6,912) | 100% (6,912/6,912) |
+| Circle accuracy | 45.96% | 100% |
+| Square accuracy | 49.65% | 100% |
+| Triangle accuracy | 37.41% | 100% |
+| Circle/square pair accuracy | 27.47% | 100% |
+| Families correct across all sizes | 13.54% (78/576) | 100% (576/576) |
+| Loss | 5.748286 | 0.0000218266 |
+
+Accuracy improves by **55.66 percentage points**. All **3,847** previously wrong
+transfer answers become correct, with zero correct-to-wrong changes. Every
+size-condition group reaches 100% accuracy and pair correctness. There are no
+new transfer accuracy gates.
+
+### Results across transfer arrangements
+
+Each arrangement contains 1,728 questions, 576 questions per shape and 144 families.
+
+| Arrangement | Transformer accuracy | CNN accuracy | CNN circle | CNN square | CNN triangle | CNN correct families | Wrong→correct |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `transfer_01` | 78.99% | 100% | 100% | 100% | 100% | 144/144 | 363 |
+| `transfer_03` | 25.93% | 100% | 100% | 100% | 100% | 144/144 | 1,280 |
+| `transfer_05` | 29.46% | 100% | 100% | 100% | 100% | 144/144 | 1,219 |
+| `transfer_07` | 43.00% | 100% | 100% | 100% | 100% | 144/144 | 985 |
+
+Unlike the earlier transformer improvement, the CNN result is not concentrated
+in one arrangement. All four training arrangements also have 1,728/1,728 correct
+answers and 144/144 correctly invariant families.
+
+### Interpretation and next decision
+
+The unchanged rendered corpus supplies enough information to learn direct
+shape-to-color answers and transfer across all four evaluated arrangements with
+a small CNN trained from scratch. Unavoidable circle/square ambiguity or an
+insufficient corpus for any model is therefore not an adequate explanation for
+the transformer's failures on this comparison.
+
+The result directs attention toward the original model's representation and
+learning setup. It does not identify one culprit: local visual processing,
+spatial pooling, question encoding and answer computation all differ. Data
+exposure and updates match, but computation differs. This is one seed on
+previously evaluated training-source arrangements; it does not establish
+unrestricted spatial generalization, relational reasoning or a recurrence advantage.
+
+The proposed next experiment returns to the recurrent transformer and changes
+only image-token construction to a small learned convolutional stem, with fresh
+weights and an explicitly preserved data/training budget. That follow-up is not
+specified or implemented by this results record.
+
+Milestone 2 remains incomplete. Preserve the CNN and transformer artifacts and
+all previous protocols. Relational reasoning and broader held-out evaluation
+remain; project test inference requires a later authorized step.

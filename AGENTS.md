@@ -394,13 +394,19 @@ seven-arrangement aggregate. Fourfold updates confound diversity and compute.
 Milestone 2 remains incomplete. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
-The separate [CNN baseline protocol and literature review](docs/milestones/milestone2_cnn_baseline.md)
-is implemented but not yet run. Train fresh seed-0 CNN weights on the identical
-four-arrangement manifest for 8,640 updates / 40 presentations per QA. Compare
-final transfer against the completed four-arrangement transformer's saved
-predictions, not the single-arrangement reference. Preserve rendering and split
-separation. This is a whole-model-family control with equal exposure, unequal
-compute, and no recurrence; do not attribute differences to one component.
+The separate [completed CNN baseline results](docs/milestones/milestone2_cnn_baseline.md#results)
+show 100% training and transfer accuracy: 6,912/6,912 QAs and 576/576 correctly
+invariant families in each population. All 16 training criteria pass. First
+recorded perfect training fit is at pass 8, maintained through pass 40; transfer
+was evaluated only at the final checkpoint. Overall same-population transfer
+improves from the four-arrangement transformer's 44.34% to 100%; every transfer
+arrangement reaches 100%.
+The corpus supports direct grounding with this CNN; multiple architectural
+components differ, so do not attribute the result to one component or recurrence.
+Exposure matches at 8,640 updates / 40 presentations per QA; compute differs.
+Preserve both models' artifacts and split separation. A convolutional image stem
+for the recurrent transformer is the proposed next experiment, not yet specified.
+Milestone 2 remains incomplete; relational reasoning and broader evaluation remain.
 Recurrence comparisons may follow, but an
 advantage is not a milestone completion gate. Later research priorities can evolve with capability
 needs; preserve simple baselines and explicit computational budgets.
