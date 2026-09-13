@@ -102,6 +102,14 @@ def diagnose_shape_grounding(model, dataset, training, **control):
         question_length=6,
         details=details,
     )
+    rows = shape_prediction_rows(dataset, details)
+    return {**asdict(metrics), **summarize_examples(rows)}, rows
+
+
+def shape_prediction_rows(dataset, details):
+    """Attach inspection metadata after prediction, independently of model architecture."""
+    if len(details) != len(dataset):
+        raise ValueError("predictions require complete dataset coverage")
     geometries = sorted(
         {tuple((o.left, o.top, o.size) for o in r.scene.objects) for r in dataset.records}
     )
@@ -141,7 +149,7 @@ def diagnose_shape_grounding(model, dataset, training, **control):
                 "geometry": [dict(left=x, top=y, size=s) for x, y, s in geometry],
             }
         )
-    return {**asdict(metrics), **summarize_examples(rows)}, rows
+    return rows
 
 
 def evaluate_shape_controls(model, dataset, training, *, seeds=(0, 1, 2, 3, 4), correct=None):

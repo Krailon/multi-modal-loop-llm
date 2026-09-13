@@ -2185,10 +2185,12 @@ the [direct-grounding results](docs/milestones/milestone2_shape_grounding.md#res
 
 Immediate objective — resolve remaining direct-grounding errors:
 
-> The [four-arrangement result](docs/milestones/milestone2_multi_arrangement.md#results)
-> establishes perfect training fit with improved but uneven transfer. The proposed
-> next decision targets broader position transfer with an explicit data and compute
-> budget; that follow-up is not yet specified.
+> The [CNN baseline protocol and focused literature review](docs/milestones/milestone2_cnn_baseline.md)
+> specify an independent model trained from scratch on the same four arrangements
+> for 8,640 updates and 40 presentations per QA. The implementation and
+> [Kaggle notebook](notebooks/kaggle_milestone2_cnn_baseline.ipynb) are ready; the
+> research run is pending. This tests direct grounding and layout transfer with
+> matched exposure, not matched compute or a recurrence comparison.
 > Preserve existing protocols, artifacts, and recorded validation/test scenes.
 
 Scale comes later.

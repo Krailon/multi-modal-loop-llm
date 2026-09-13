@@ -1,0 +1,5 @@
+image_size: 32
+vocab_size: 17
+channels: [32, 64, 64, 64, 64]
+question_dim: 32
+hidden_dim: 128

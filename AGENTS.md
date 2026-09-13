@@ -391,10 +391,16 @@ Same-population transfer improves from 33.71% to 44.34% and 39/576 to 78/576 cor
 families, but 72 of those 78 occur in transfer_01; transfer remains uneven. Loss
 worsens from 4.80 to 5.75. Comparisons use the same four arrangements, not the prior
 seven-arrangement aggregate. Fourfold updates confound diversity and compute.
-Broader position-transfer work is a proposed next decision, not a specified
-experiment. Milestone 2 remains incomplete. Preserve
+Milestone 2 remains incomplete. Preserve
 all artifacts and exact validation/test records; reserve test inference for a later
 authorized step.
+The separate [CNN baseline protocol and literature review](docs/milestones/milestone2_cnn_baseline.md)
+is implemented but not yet run. Train fresh seed-0 CNN weights on the identical
+four-arrangement manifest for 8,640 updates / 40 presentations per QA. Compare
+final transfer against the completed four-arrangement transformer's saved
+predictions, not the single-arrangement reference. Preserve rendering and split
+separation. This is a whole-model-family control with equal exposure, unequal
+compute, and no recurrence; do not attribute differences to one component.
 Recurrence comparisons may follow, but an
 advantage is not a milestone completion gate. Later research priorities can evolve with capability
 needs; preserve simple baselines and explicit computational budgets.
